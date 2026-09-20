@@ -59,7 +59,7 @@ export default async function HomePage() {
         <div className="max-w-3xl space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary">
             <Sparkles className="size-3.5" />
-            <span>Next-Generation Simulated Banking Platform</span>
+            <span>Next-Generation Digital Banking Platform</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-balance">
@@ -73,7 +73,7 @@ export default async function HomePage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <Link href="/register" className="w-full sm:w-auto">
               <Button size="lg" className="w-full sm:w-auto gap-2 font-semibold h-12 px-6 text-base">
-                <span>Open a Test Account</span>
+                <span>Open an Account</span>
                 <ArrowRight className="size-4" />
               </Button>
             </Link>
@@ -122,7 +122,7 @@ export default async function HomePage() {
       {/* Footer */}
       <footer className="border-t border-border/60 py-6 text-center text-xs text-muted-foreground">
         <div className="container mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>&copy; {new Date().getFullYear()} PrimeVault Bank. Simulation environment.</span>
+          <span>&copy; {new Date().getFullYear()} PrimeVault Bank. All rights reserved.</span>
           <div className="flex items-center gap-1.5">
             <Lock className="size-3.5 text-emerald-500" />
             <span>256-Bit Encrypted Session</span>

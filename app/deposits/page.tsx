@@ -155,7 +155,42 @@ export default async function DepositsPage() {
             <CardDescription>Your recent deposit submissions and their status</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-border/60">
+              {depositHistory.map((tx: any) => (
+                <div key={tx.id} className="flex items-center gap-3 py-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="size-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold truncate">
+                        {tx.destinationAccount?.accountType || "Deposit"}
+                      </span>
+                      <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                        +{formatCurrency(Number(tx.amount))}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <span className="text-[11px] text-muted-foreground font-mono truncate">
+                        {tx.referenceId}
+                      </span>
+                      {getStatusBadge(tx.status)}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {new Date(tx.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -195,3 +230,4 @@ export default async function DepositsPage() {
     </div>
   )
 }
+

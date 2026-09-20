@@ -143,7 +143,7 @@ export default async function DashboardPage() {
           <CardContent className="pt-2">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>FDIC Insured Simulation</span>
+              <span>FDIC Member Institution</span>
             </div>
           </CardContent>
         </Card>
@@ -220,7 +220,7 @@ export default async function DashboardPage() {
 
       {/* Recent Transactions */}
       <Card className="shadow-sm border-border/80">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <div>
             <CardTitle className="text-lg">Recent Transactions</CardTitle>
             <CardDescription>Live ledger of incoming and outgoing activity</CardDescription>
@@ -234,12 +234,10 @@ export default async function DashboardPage() {
         </CardHeader>
         <CardContent>
           {transactions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+            <div className="flex flex-col items-center justify-center p-8 sm:p-12 text-center text-muted-foreground">
               <Clock className="size-10 stroke-[1.5] mb-3 text-muted-foreground/60" />
               <p className="font-medium text-foreground">No transaction history yet</p>
-              <p className="text-sm mt-1">
-                Make a transfer or deposit to see activity here.
-              </p>
+              <p className="text-sm mt-1">Make a transfer or deposit to see activity here.</p>
               <div className="flex items-center gap-3 mt-4">
                 <Link href="/deposits">
                   <Button variant="outline" size="sm">Make Deposit</Button>
@@ -250,85 +248,145 @@ export default async function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type &amp; Reference</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((tx: any) => {
-                    const isSender = accountIds.includes(tx.sourceAccountId || "")
-                    const isRecipient = accountIds.includes(tx.destinationAccountId || "")
-                    const isOutgoing = isSender && !isRecipient
-
-                    return (
-                      <TableRow key={tx.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex size-8 items-center justify-center rounded-full ${
-                                isOutgoing
-                                  ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                              }`}
-                            >
-                              {isOutgoing ? (
-                                <ArrowUpRight className="size-4" />
-                              ) : (
-                                <ArrowDownLeft className="size-4" />
-                              )}
-                            </div>
-                            <div>
-                              <div className="font-semibold text-xs">
-                                {tx.type.replace(/_/g, " ")}
-                              </div>
-                              <div className="font-mono text-[11px] text-muted-foreground">
-                                {tx.referenceId}
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium text-xs">
-                            {tx.recipientName || tx.description || "Transfer"}
-                          </div>
-                          {tx.recipientBank && (
-                            <div className="text-[11px] text-muted-foreground">{tx.recipientBank}</div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+            <>
+              {/* Mobile card list */}
+              <div className="sm:hidden divide-y divide-border/60">
+                {transactions.map((tx: any) => {
+                  const isSender = accountIds.includes(tx.sourceAccountId || "")
+                  const isRecipient = accountIds.includes(tx.destinationAccountId || "")
+                  const isOutgoing = isSender && !isRecipient
+                  return (
+                    <div key={tx.id} className="flex items-center gap-3 py-3">
+                      <div
+                        className={`flex size-9 shrink-0 items-center justify-center rounded-full ${
+                          isOutgoing
+                            ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {isOutgoing ? (
+                          <ArrowUpRight className="size-4" />
+                        ) : (
+                          <ArrowDownLeft className="size-4" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold truncate">
+                            {tx.recipientName || tx.description || tx.type.replace(/_/g, " ")}
+                          </span>
+                          <span
+                            className={`text-sm font-bold font-mono shrink-0 ${
+                              isOutgoing
+                                ? "text-foreground"
+                                : "text-emerald-600 dark:text-emerald-400"
+                            }`}
+                          >
+                            {isOutgoing ? "-" : "+"}
+                            {formatCurrency(Number(tx.amount))}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground font-mono truncate">
+                            {tx.referenceId}
+                          </span>
+                          {getStatusBadge(tx.status)}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
                           {new Date(tx.createdAt).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
                           })}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(tx.status)}</TableCell>
-                        <TableCell
-                          className={`text-right font-mono font-semibold text-sm ${
-                            isOutgoing
-                              ? "text-foreground"
-                              : "text-emerald-600 dark:text-emerald-400"
-                          }`}
-                        >
-                          {isOutgoing ? "-" : "+"}
-                          {formatCurrency(Number(tx.amount))}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type & Reference</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((tx: any) => {
+                      const isSender = accountIds.includes(tx.sourceAccountId || "")
+                      const isRecipient = accountIds.includes(tx.destinationAccountId || "")
+                      const isOutgoing = isSender && !isRecipient
+
+                      return (
+                        <TableRow key={tx.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`flex size-8 items-center justify-center rounded-full ${
+                                  isOutgoing
+                                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                }`}
+                              >
+                                {isOutgoing ? (
+                                  <ArrowUpRight className="size-4" />
+                                ) : (
+                                  <ArrowDownLeft className="size-4" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-xs">
+                                  {tx.type.replace(/_/g, " ")}
+                                </div>
+                                <div className="font-mono text-[11px] text-muted-foreground">
+                                  {tx.referenceId}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium text-xs">
+                              {tx.recipientName || tx.description || "Transfer"}
+                            </div>
+                            {tx.recipientBank && (
+                              <div className="text-[11px] text-muted-foreground">{tx.recipientBank}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {new Date(tx.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </TableCell>
+                          <TableCell>{getStatusBadge(tx.status)}</TableCell>
+                          <TableCell
+                            className={`text-right font-mono font-semibold text-sm ${
+                              isOutgoing
+                                ? "text-foreground"
+                                : "text-emerald-600 dark:text-emerald-400"
+                            }`}
+                          >
+                            {isOutgoing ? "-" : "+"}
+                            {formatCurrency(Number(tx.amount))}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
     </div>
   )
 }
+

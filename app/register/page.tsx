@@ -187,7 +187,7 @@ export default function RegisterPage() {
           <CardFooter className="flex flex-col space-y-4 border-t border-border/50 pt-4 text-center">
             <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Zero-risk simulated banking environment</span>
+              <span>256-bit encrypted & bank-grade secure</span>
             </div>
             <p className="text-sm text-muted-foreground">
               Already have an account?{" "}

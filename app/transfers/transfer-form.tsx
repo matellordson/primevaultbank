@@ -641,25 +641,25 @@ export function TransferForm({
 
           <Button
             type="submit"
-            className="w-full h-11 font-semibold text-base gap-2"
+            className="w-full h-11 font-semibold text-sm sm:text-base gap-2 px-3"
             disabled={loading || !isFormValid}
           >
             {loading ? (
               "Processing…"
             ) : !hasEnteredAmount ? (
-              "Enter an amount to transfer"
+              <span className="truncate">Enter an amount to transfer</span>
             ) : !isAmountValid ? (
-              "Amount does not meet conditions"
+              <span className="truncate">Amount does not meet conditions</span>
             ) : transferType === "INTERNAL_TRANSFER" && !isInternalRecipientValid ? (
-              "Enter valid 10-digit recipient account"
+              <span className="truncate">Enter valid 10-digit account</span>
             ) : transferType === "EXTERNAL_WIRE" && !isExternalValid ? (
-              "Complete beneficiary wire details"
+              <span className="truncate">Complete beneficiary wire details</span>
             ) : (
               <>
-                <span>
+                <span className="truncate">
                   Submit {transferType === "EXTERNAL_WIRE" ? "Wire Request" : "Transfer"} — {formatCurrency(numericAmount)}
                 </span>
-                <ArrowRight className="size-4" />
+                <ArrowRight className="size-4 shrink-0" />
               </>
             )}
           </Button>

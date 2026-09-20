@@ -338,7 +338,51 @@ export function AdminControls({
                   <p className="text-xs mt-0.5">All external wire requests have been processed.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+              <>
+                {/* Mobile card list */}
+                <div className="sm:hidden divide-y divide-border/60">
+                  {pendingWires.map((tx) => (
+                    <div key={tx.id} className="py-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-mono text-xs font-bold">{tx.referenceId}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {new Date(tx.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        </div>
+                        <span className="font-mono font-bold text-base">{formatCurrency(tx.amount)}</span>
+                      </div>
+                      <div className="text-xs space-y-1">
+                        <div><span className="text-muted-foreground">From: </span><span className="font-semibold">{tx.senderName}</span> <span className="font-mono text-muted-foreground">•••• {tx.senderAccount.slice(-4)}</span></div>
+                        <div><span className="text-muted-foreground">To: </span><span className="font-semibold">{tx.recipientName || "N/A"}</span> {tx.recipientBank && <span className="text-muted-foreground">– {tx.recipientBank}</span>}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprove(tx.id)}
+                          disabled={processingId === tx.id}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-9"
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setRejectingId(tx.id)}
+                          disabled={processingId === tx.id}
+                          className="flex-1 gap-1 text-xs h-9"
+                        >
+                          <XCircle className="size-3.5" />
+                          Decline
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden sm:block overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -408,6 +452,8 @@ export function AdminControls({
                     </TableBody>
                   </Table>
                 </div>
+              </>
+
               )}
             </CardContent>
           </Card>
@@ -436,86 +482,145 @@ export function AdminControls({
                   <p className="text-xs mt-0.5">All deposit requests have been processed.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Reference / Date</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Sending Bank</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Proof</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pendingDeposits.map((tx) => (
-                        <TableRow key={tx.id}>
-                          <TableCell>
+                <>
+                  {/* Mobile card list */}
+                  <div className="sm:hidden divide-y divide-border/60">
+                    {pendingDeposits.map((tx) => (
+                      <div key={tx.id} className="py-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
                             <div className="font-mono text-xs font-bold">{tx.referenceId}</div>
                             <div className="text-[11px] text-muted-foreground">
-                              {new Date(tx.createdAt).toLocaleString("en-US", {
-                                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                              })}
+                              {new Date(tx.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-xs font-semibold">{tx.senderName}</div>
-                            <div className="font-mono text-[11px] text-muted-foreground">
-                              Acc: •••• {tx.senderAccount.slice(-4)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-xs">{tx.senderBank || "N/A"}</div>
-                            {tx.depositReference && (
-                              <div className="font-mono text-[10px] text-muted-foreground">
-                                Ref: {tx.depositReference}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400">
-                              +{formatCurrency(tx.amount)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <button
-                              type="button"
-                              onClick={() => setViewingTx(tx)}
-                              className="flex items-center gap-1 text-xs text-primary hover:underline"
-                            >
-                              <FileText className="size-3" />
-                              View proof
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleApprove(tx.id)}
-                                disabled={processingId === tx.id}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-8"
-                              >
-                                <CheckCircle2 className="size-3.5" />
-                                Verify &amp; Credit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => setRejectingId(tx.id)}
-                                disabled={processingId === tx.id}
-                                className="gap-1 text-xs h-8"
-                              >
-                                <XCircle className="size-3.5" />
-                                Decline
-                              </Button>
-                            </div>
-                          </TableCell>
+                          </div>
+                          <span className="font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
+                            +{formatCurrency(tx.amount)}
+                          </span>
+                        </div>
+                        <div className="text-xs space-y-1">
+                          <div><span className="text-muted-foreground">From: </span><span className="font-semibold">{tx.senderName}</span> <span className="font-mono text-muted-foreground">•••• {tx.senderAccount.slice(-4)}</span></div>
+                          <div><span className="text-muted-foreground">Bank: </span>{tx.senderBank || "N/A"}</div>
+                          {tx.depositReference && <div><span className="text-muted-foreground">Ref: </span><span className="font-mono">{tx.depositReference}</span></div>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setViewingTx(tx)}
+                            className="flex items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            <FileText className="size-3" />
+                            View proof
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleApprove(tx.id)}
+                            disabled={processingId === tx.id}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-9"
+                          >
+                            <CheckCircle2 className="size-3.5" />
+                            Verify & Credit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setRejectingId(tx.id)}
+                            disabled={processingId === tx.id}
+                            className="flex-1 gap-1 text-xs h-9"
+                          >
+                            <XCircle className="size-3.5" />
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Reference / Date</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Sending Bank</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Proof</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingDeposits.map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell>
+                              <div className="font-mono text-xs font-bold">{tx.referenceId}</div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {new Date(tx.createdAt).toLocaleString("en-US", {
+                                  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                                })}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-xs font-semibold">{tx.senderName}</div>
+                              <div className="font-mono text-[11px] text-muted-foreground">
+                                Acc: •••• {tx.senderAccount.slice(-4)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-xs">{tx.senderBank || "N/A"}</div>
+                              {tx.depositReference && (
+                                <div className="font-mono text-[10px] text-muted-foreground">
+                                  Ref: {tx.depositReference}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400">
+                                +{formatCurrency(tx.amount)}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <button
+                                type="button"
+                                onClick={() => setViewingTx(tx)}
+                                className="flex items-center gap-1 text-xs text-primary hover:underline"
+                              >
+                                <FileText className="size-3" />
+                                View proof
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApprove(tx.id)}
+                                  disabled={processingId === tx.id}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-8"
+                                >
+                                  <CheckCircle2 className="size-3.5" />
+                                  Verify & Credit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => setRejectingId(tx.id)}
+                                  disabled={processingId === tx.id}
+                                  className="gap-1 text-xs h-8"
+                                >
+                                  <XCircle className="size-3.5" />
+                                  Decline
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+
               )}
             </CardContent>
           </Card>
@@ -636,36 +741,56 @@ export function AdminControls({
             {auditLogs.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No audit logs yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Timestamp</TableHead>
-                      <TableHead>Admin</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Details</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {auditLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="text-xs text-muted-foreground font-mono whitespace-nowrap">
+              <>
+                {/* Mobile card list */}
+                <div className="sm:hidden divide-y divide-border/60">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="py-3 space-y-1">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <Badge variant="outline" className="font-mono text-[10px]">{log.action}</Badge>
+                        <span className="text-[11px] text-muted-foreground font-mono">
                           {new Date(log.createdAt).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-xs font-semibold">{log.adminName}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-mono text-[10px]">
-                            {log.action}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-foreground max-w-[300px] truncate">
-                          {log.details}
-                        </TableCell>
+                        </span>
+                      </div>
+                      <div className="text-xs font-semibold">{log.adminName}</div>
+                      {log.details && <div className="text-xs text-muted-foreground break-words">{log.details}</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Timestamp</TableHead>
+                        <TableHead>Admin</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Details</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {auditLogs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-xs text-muted-foreground font-mono whitespace-nowrap">
+                            {new Date(log.createdAt).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-xs font-semibold">{log.adminName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              {log.action}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-foreground max-w-[300px] truncate">
+                            {log.details}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+
             )}
           </CardContent>
         </Card>
