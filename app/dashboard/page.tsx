@@ -42,7 +42,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/login")
   if (user.role === "ADMIN") redirect("/admin")
 
-  const accountIds = user.accounts.map((a) => a.id)
+  const accountIds = user.accounts.map((a: any) => a.id)
 
   const transactions = await db.transaction.findMany({
     where: {
@@ -59,10 +59,10 @@ export default async function DashboardPage() {
     take: 20,
   })
 
-  const totalBalance = user.accounts.reduce((sum, acc) => sum + Number(acc.balance), 0)
+  const totalBalance = user.accounts.reduce((sum: number, acc: any) => sum + Number(acc.balance), 0)
 
-  const checkingAcc = user.accounts.find((a) => a.accountType === "CHECKING")
-  const savingsAcc = user.accounts.find((a) => a.accountType === "SAVINGS")
+  const checkingAcc = user.accounts.find((a: any) => a.accountType === "CHECKING")
+  const savingsAcc = user.accounts.find((a: any) => a.accountType === "SAVINGS")
 
   function getStatusBadge(status: string) {
     switch (status) {
@@ -262,7 +262,7 @@ export default async function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((tx) => {
+                  {transactions.map((tx: any) => {
                     const isSender = accountIds.includes(tx.sourceAccountId || "")
                     const isRecipient = accountIds.includes(tx.destinationAccountId || "")
                     const isOutgoing = isSender && !isRecipient

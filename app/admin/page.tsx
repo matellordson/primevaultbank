@@ -66,14 +66,14 @@ export default async function AdminPage() {
     take: 30,
   })
 
-  const totalAccounts = allUsers.reduce((sum, u) => sum + u.accounts.length, 0)
+  const totalAccounts = allUsers.reduce((sum: number, u: any) => sum + u.accounts.length, 0)
   const totalLiquidity = allUsers.reduce(
-    (sum, u) => sum + u.accounts.reduce((aSum, a) => aSum + Number(a.balance), 0),
+    (sum: number, u: any) => sum + u.accounts.reduce((aSum: number, a: any) => aSum + Number(a.balance), 0),
     0
   )
   const completedCount = await db.transaction.count({ where: { status: "COMPLETED" } })
-  const depositRequestCount = pendingTransactions.filter((t) => t.type === "DEPOSIT_REQUEST").length
-  const wireCount = pendingTransactions.filter((t) => t.type === "EXTERNAL_WIRE").length
+  const depositRequestCount = pendingTransactions.filter((t: any) => t.type === "DEPOSIT_REQUEST").length
+  const wireCount = pendingTransactions.filter((t: any) => t.type === "EXTERNAL_WIRE").length
 
   return (
     <div className="min-h-screen bg-muted/20 flex flex-col">
@@ -105,7 +105,7 @@ export default async function AdminPage() {
             totalLiquidity,
             completedCount,
           }}
-          pendingTransactions={pendingTransactions.map((tx) => ({
+          pendingTransactions={pendingTransactions.map((tx: any) => ({
             id: tx.id,
             referenceId: tx.referenceId,
             type: tx.type,
@@ -125,13 +125,13 @@ export default async function AdminPage() {
             depositReference: tx.depositReference,
             paymentProof: tx.paymentProof,
           }))}
-          users={allUsers.map((u) => ({
+          users={allUsers.map((u: any) => ({
             id: u.id,
             name: u.name,
             email: u.email,
             role: u.role,
             createdAt: u.createdAt.toISOString(),
-            accounts: u.accounts.map((a) => ({
+            accounts: u.accounts.map((a: any) => ({
               id: a.id,
               accountNumber: a.accountNumber,
               accountType: a.accountType,
@@ -139,7 +139,7 @@ export default async function AdminPage() {
               status: a.status,
             })),
           }))}
-          auditLogs={auditLogs.map((log) => ({
+          auditLogs={auditLogs.map((log: any) => ({
             id: log.id,
             adminName: log.admin.name,
             action: log.action,

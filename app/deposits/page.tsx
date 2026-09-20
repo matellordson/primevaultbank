@@ -48,7 +48,7 @@ export default async function DepositsPage() {
     update: {},
   })
 
-  const accountIds = user.accounts.map((a) => a.id)
+  const accountIds = user.accounts.map((a: any) => a.id)
 
   // User's deposit requests
   const depositHistory = await db.transaction.findMany({
@@ -61,7 +61,7 @@ export default async function DepositsPage() {
     take: 10,
   })
 
-  const accounts = user.accounts.map((a) => ({
+  const accounts = user.accounts.map((a: any) => ({
     id: a.id,
     accountNumber: a.accountNumber,
     accountType: a.accountType,
@@ -167,7 +167,7 @@ export default async function DepositsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {depositHistory.map((tx) => (
+                  {depositHistory.map((tx: any) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-mono text-xs font-bold">{tx.referenceId}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">

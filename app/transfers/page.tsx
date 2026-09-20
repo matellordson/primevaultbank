@@ -20,7 +20,7 @@ export default async function TransfersPage() {
   const minSavingsThreshold = settings ? Number(settings.minSavingsThreshold) : 500
   const minWithdrawalAmount = settings ? Number(settings.minWithdrawalAmount ?? 10) : 10
 
-  const accounts = user.accounts.map((a) => ({
+  const accounts = user.accounts.map((a: any) => ({
     id: a.id,
     accountNumber: a.accountNumber,
     accountType: a.accountType,
