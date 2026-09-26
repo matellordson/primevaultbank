@@ -123,14 +123,17 @@ export function DashboardClient({ user, transactions }: DashboardClientProps) {
     bank: string
     account: string
     type: "internal" | "wire"
-  }>>(() => {
-    if (typeof window === "undefined") return []
+  }>>([])
+
+  React.useEffect(() => {
     try {
-      return JSON.parse(localStorage.getItem("pv_beneficiaries") || "[]")
-    } catch {
-      return []
-    }
-  })
+      const stored = localStorage.getItem("pv_beneficiaries")
+      if (stored) {
+        setBeneficiaries(JSON.parse(stored))
+      }
+    } catch {}
+  }, [])
+
   const [showAddBeneficiary, setShowAddBeneficiary] = React.useState(false)
   const [beneForm, setBeneForm] = React.useState({ name: "", bank: "", account: "", type: "internal" as "internal" | "wire" })
 
