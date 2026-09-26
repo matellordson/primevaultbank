@@ -1,7 +1,7 @@
 "use server"
 
 import { db } from "@/lib/db"
-import { hashPassword, verifyPassword, createSession, clearSession } from "@/lib/auth"
+import { hashPassword, verifyPassword, createSession, clearSession, getSession } from "@/lib/auth"
 import { redirect } from "next/navigation"
 
 function generateAccountNumber(): string {
@@ -17,6 +17,9 @@ export async function registerAction(formData: FormData) {
   const name = formData.get("name") as string
   const email = formData.get("email") as string
   const password = formData.get("password") as string
+
+  const phone = formData.get("phone") as string
+  const requestedAccountType = (formData.get("accountType") as string) || "CHECKING"
 
   if (!name || !email || !password) {
     return { error: "Please fill in all required fields." }
@@ -43,12 +46,13 @@ export async function registerAction(formData: FormData) {
       data: {
         name: name.trim(),
         email: email.toLowerCase().trim(),
+        phone: phone ? phone.trim() : null,
         passwordHash,
         role: "USER",
         accounts: {
           create: [
-            { accountNumber: checkingNumber, accountType: "CHECKING", balance: 2500.0 },
-            { accountNumber: savingsNumber, accountType: "SAVINGS", balance: 10000.0 },
+            { accountNumber: checkingNumber, accountType: "CHECKING", balance: 0.0, status: "FROZEN" },
+            { accountNumber: savingsNumber, accountType: "SAVINGS", balance: 0.0, status: "FROZEN" },
           ],
         },
       },
@@ -65,7 +69,7 @@ export async function registerAction(formData: FormData) {
     return { error: "Failed to create account. Please try again." }
   }
 
-  redirect("/dashboard")
+  redirect("/dashboard?welcome=1")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -155,3 +159,23 @@ export async function logoutAction() {
   await clearSession()
   redirect("/login")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPLETE KYC VERIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+export async function completeKycAction(): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession()
+  if (!session) return { success: false, error: "Unauthorized" }
+
+  try {
+    await db.account.updateMany({
+      where: { userId: session.userId },
+      data: { status: "ACTIVE" },
+    })
+    return { success: true }
+  } catch (error) {
+    console.error("KYC completion error:", error)
+    return { success: false, error: "Failed to update account status." }
+  }
+}
+

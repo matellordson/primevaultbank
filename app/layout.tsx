@@ -1,18 +1,9 @@
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import { cookies } from "next/headers"
-import { ThemeProvider, type Theme } from "@/components/theme-provider"
+import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-})
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-})
+const geistSans = { variable: "" }
+const geistMono = { variable: "" }
 
 export const metadata: Metadata = {
   title: {
@@ -51,23 +42,18 @@ export const metadata: Metadata = {
   },
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const cookieStore = await cookies()
-  const rawTheme = cookieStore.get("pv_theme")?.value as Theme | undefined
-  const isDark = rawTheme === "dark"
-
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${isDark ? "dark" : ""} h-full antialiased`}
-      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="h-full bg-background text-foreground transition-colors duration-150">
-        <ThemeProvider initialTheme={rawTheme}>{children}</ThemeProvider>
+      <body className="h-full bg-slate-50 text-slate-900 antialiased font-sans">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   )

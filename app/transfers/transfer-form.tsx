@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { createInternalTransfer, createExternalWire } from "@/lib/actions/transfers"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,6 +19,8 @@ import {
   ArrowRight,
   AlertCircle,
   Info,
+  ShieldAlert,
+  ShieldCheck,
 } from "lucide-react"
 import { formatCurrency, formatAmountInput, parseAmount } from "@/lib/utils"
 
@@ -41,20 +45,26 @@ export function TransferForm({
   minSavingsThreshold,
   minWithdrawalAmount = 10,
 }: TransferFormProps) {
+  const searchParams = useSearchParams()
+  const qType = searchParams.get("type")
+  const qAccount = searchParams.get("account") || ""
+  const qName = searchParams.get("name") || ""
+  const qBank = searchParams.get("bank") || ""
+
   const [transferType, setTransferType] = React.useState<"INTERNAL_TRANSFER" | "EXTERNAL_WIRE">(
-    "INTERNAL_TRANSFER"
+    qType === "wire" ? "EXTERNAL_WIRE" : "INTERNAL_TRANSFER"
   )
   const [sourceAccountId, setSourceAccountId] = React.useState<string>(accounts[0]?.id || "")
   const [amount, setAmount] = React.useState("")
   const [description, setDescription] = React.useState("")
 
   // Internal
-  const [recipientAccountNumber, setRecipientAccountNumber] = React.useState("")
+  const [recipientAccountNumber, setRecipientAccountNumber] = React.useState(qType !== "wire" ? qAccount : "")
 
   // External wire
-  const [recipientName, setRecipientName] = React.useState("")
-  const [recipientBank, setRecipientBank] = React.useState("")
-  const [recipientWireAccount, setRecipientWireAccount] = React.useState("")
+  const [recipientName, setRecipientName] = React.useState(qName)
+  const [recipientBank, setRecipientBank] = React.useState(qBank)
+  const [recipientWireAccount, setRecipientWireAccount] = React.useState(qType === "wire" ? qAccount : "")
   const [recipientRoutingNumber, setRecipientRoutingNumber] = React.useState("")
 
   const [loading, setLoading] = React.useState(false)
@@ -248,11 +258,11 @@ export function TransferForm({
             <CardDescription>Send funds internally or submit an external wire request</CardDescription>
           </div>
           {/* Rail Selector */}
-          <div className="flex rounded-lg bg-muted p-1 border border-border/60">
+          <div className="flex w-full sm:w-auto rounded-lg bg-muted p-1 border border-border/60">
             <button
               type="button"
               onClick={() => setTransferType("INTERNAL_TRANSFER")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-md text-xs font-semibold transition-all ${
                 transferType === "INTERNAL_TRANSFER"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -264,7 +274,7 @@ export function TransferForm({
             <button
               type="button"
               onClick={() => setTransferType("EXTERNAL_WIRE")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-md text-xs font-semibold transition-all ${
                 transferType === "EXTERNAL_WIRE"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -283,6 +293,63 @@ export function TransferForm({
             <div className="flex items-start gap-2 p-3 text-sm rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
               <AlertCircle className="size-4 shrink-0 mt-0.5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* Identity Verification Mandatory Gate */}
+          {selectedSource?.status !== "ACTIVE" && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5 shadow-sm">
+              <div className="flex items-start gap-3.5">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
+                  <ShieldAlert className="size-5" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-amber-950">
+                    Transfers Restricted — KYC Verification Required
+                  </h4>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Under Federal Banking Compliance Regulations (FinCEN / OFAC), your account is currently in <strong>Non-Active</strong> state. You cannot initiate internal transfers or external wires until Tier-1 identity verification has been reviewed and cleared.
+                  </p>
+                  <div className="pt-2">
+                    <Link
+                      href="/kyc"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-xs font-bold text-white transition-colors shadow-sm"
+                    >
+                      <ShieldCheck className="size-3.5" />
+                      <span>Complete Identity Verification</span>
+                      <ArrowRight className="size-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Insufficient Funds Gate ($0.00 Balance Prevention) */}
+          {selectedSource?.status === "ACTIVE" && Number(selectedSource.balance) <= 0 && (
+            <div className="rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5 shadow-sm">
+              <div className="flex items-start gap-3.5">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700">
+                  <AlertCircle className="size-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-red-950">
+                    Insufficient Funds — Account Balance is $0.00
+                  </h4>
+                  <p className="text-xs text-red-800 leading-relaxed mt-0.5">
+                    Your account has an empty balance ($0.00). You cannot transfer or wire funds until you deposit money into your account.
+                  </p>
+                  <div className="pt-2.5">
+                    <Link
+                      href="/deposits"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-xs font-bold text-white transition-colors shadow-sm"
+                    >
+                      <ArrowRight className="size-3.5" />
+                      <span>Deposit Funds First</span>
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -642,9 +709,13 @@ export function TransferForm({
           <Button
             type="submit"
             className="w-full h-11 font-semibold text-sm sm:text-base gap-2 px-3"
-            disabled={loading || !isFormValid}
+            disabled={loading || selectedSource?.status !== "ACTIVE" || (selectedSource?.balance ?? 0) <= 0 || !isFormValid}
           >
-            {loading ? (
+            {selectedSource?.status !== "ACTIVE" ? (
+              <span className="truncate">VERIFICATION REQUIRED TO TRANSFER</span>
+            ) : (selectedSource?.balance ?? 0) <= 0 ? (
+              <span className="truncate">INSUFFICIENT FUNDS ($0.00) — DEPOSIT FIRST</span>
+            ) : loading ? (
               "Processing…"
             ) : !hasEnteredAmount ? (
               <span className="truncate">Enter an amount to transfer</span>

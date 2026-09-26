@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { createDepositRequest } from "@/lib/actions/transfers"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Clock, AlertCircle, ArrowRight, Info, CheckCircle2, XCircle } from "lucide-react"
+import { Clock, AlertCircle, ArrowRight, Info, CheckCircle2, XCircle, ShieldAlert, ShieldCheck } from "lucide-react"
 import { formatCurrency, formatAmountInput, parseAmount } from "@/lib/utils"
 
 interface Account {
@@ -149,6 +150,35 @@ export function DepositForm({
             <div className="flex items-start gap-2 p-3 text-sm rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
               <AlertCircle className="size-4 shrink-0 mt-0.5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* Identity Verification Mandatory Gate */}
+          {selectedDest?.status !== "ACTIVE" && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
+                  <ShieldAlert className="size-4" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-amber-950">
+                    Deposit Crediting Restricted — KYC Required
+                  </h4>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Federal banking compliance requires verified customer clearance to credit funds into bank accounts. Your account is currently in <strong>Non-Active</strong> status.
+                  </p>
+                  <div className="pt-1.5">
+                    <Link
+                      href="/kyc"
+                      className="inline-flex items-center gap-1 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs font-bold text-white transition-colors shadow-sm"
+                    >
+                      <ShieldCheck className="size-3.5" />
+                      <span>Complete KYC Verification</span>
+                      <ArrowRight className="size-3" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -354,9 +384,11 @@ export function DepositForm({
           <Button
             type="submit"
             className="w-full h-11 font-semibold gap-2"
-            disabled={loading || !isFormValid}
+            disabled={loading || selectedDest?.status !== "ACTIVE" || !isFormValid}
           >
-            {loading ? (
+            {selectedDest?.status !== "ACTIVE" ? (
+              <span>VERIFICATION REQUIRED TO DEPOSIT</span>
+            ) : loading ? (
               "Submitting…"
             ) : !hasEnteredAmount ? (
               "Enter a deposit amount"

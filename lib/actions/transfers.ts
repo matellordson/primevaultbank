@@ -55,11 +55,19 @@ export async function createInternalTransfer(formData: {
   })
 
   if (!sourceAccount) return { error: "Source account not found or does not belong to you." }
-  if (sourceAccount.status === "FROZEN") {
-    return { error: "This account is frozen. Please contact bank administration." }
+  if (sourceAccount.status !== "ACTIVE") {
+    return {
+      error:
+        "Identity verification required. Federal banking compliance requires Tier-1 KYC verification before executing internal transfers.",
+    }
   }
 
   const currentBalance = Number(sourceAccount.balance)
+  if (currentBalance <= 0) {
+    return {
+      error: "Cannot transfer from an empty account ($0.00). Please deposit funds first.",
+    }
+  }
   const minReserve =
     sourceAccount.accountType === "SAVINGS" ? thresholds.savings : thresholds.checking
 
@@ -92,8 +100,8 @@ export async function createInternalTransfer(formData: {
     return { error: "Cannot transfer to your own account." }
   }
 
-  if (destAccount.status === "FROZEN") {
-    return { error: "The destination account is currently unable to receive funds." }
+  if (destAccount.status !== "ACTIVE") {
+    return { error: "The destination account is unverified or currently unable to receive funds." }
   }
 
   const referenceId = generateReference()
@@ -176,11 +184,19 @@ export async function createExternalWire(formData: {
   })
 
   if (!sourceAccount) return { error: "Source account not found or does not belong to you." }
-  if (sourceAccount.status === "FROZEN") {
-    return { error: "This account is frozen. Please contact bank administration." }
+  if (sourceAccount.status !== "ACTIVE") {
+    return {
+      error:
+        "Identity verification required. Outbound wire clearing is restricted until Tier-1 KYC identity verification is approved.",
+    }
   }
 
   const currentBalance = Number(sourceAccount.balance)
+  if (currentBalance <= 0) {
+    return {
+      error: "Cannot wire funds from an empty account ($0.00). Please deposit funds first.",
+    }
+  }
   const minReserve =
     sourceAccount.accountType === "SAVINGS" ? thresholds.savings : thresholds.checking
 
@@ -268,8 +284,11 @@ export async function createDepositRequest(formData: {
   })
 
   if (!destAccount) return { error: "Destination account not found." }
-  if (destAccount.status === "FROZEN") {
-    return { error: "This account is frozen. Please contact bank administration." }
+  if (destAccount.status !== "ACTIVE") {
+    return {
+      error:
+        "Identity verification required. Please complete Tier-1 KYC verification to activate deposit crediting.",
+    }
   }
 
   const referenceId = `DEP-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`
