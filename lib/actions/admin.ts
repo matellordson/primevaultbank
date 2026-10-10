@@ -350,9 +350,21 @@ export async function updateBankSettings(params: {
   minSavingsThreshold: number
   minDepositAmount: number
   minWithdrawalAmount: number
+  // Security codes (empty string = gate disabled)
+  sortCode?: string
+  bicCode?: string
+  rvsCode?: string
+  fwCode?: string
 }): Promise<{ success?: boolean; message?: string; error?: string }> {
   try {
     const admin = await verifyAdmin()
+
+    const codeData = {
+      sortCode: params.sortCode ?? "",
+      bicCode: params.bicCode ?? "",
+      rvsCode: params.rvsCode ?? "",
+      fwCode: params.fwCode ?? "",
+    }
 
     await db.bankSetting.upsert({
       where: { id: "default" },
@@ -368,6 +380,7 @@ export async function updateBankSettings(params: {
         minSavingsThreshold: params.minSavingsThreshold,
         minDepositAmount: params.minDepositAmount,
         minWithdrawalAmount: params.minWithdrawalAmount,
+        ...codeData,
       },
       update: {
         bankName: params.bankName,
@@ -380,6 +393,7 @@ export async function updateBankSettings(params: {
         minSavingsThreshold: params.minSavingsThreshold,
         minDepositAmount: params.minDepositAmount,
         minWithdrawalAmount: params.minWithdrawalAmount,
+        ...codeData,
       },
     })
 
@@ -387,11 +401,13 @@ export async function updateBankSettings(params: {
       data: {
         adminId: admin.id,
         action: "UPDATE_BANK_SETTINGS",
-        details: `Bank settings updated — min deposit: $${params.minDepositAmount}, min withdrawal: $${params.minWithdrawalAmount}, checking reserve: $${params.minCheckingThreshold}, savings reserve: $${params.minSavingsThreshold}`,
+        details: `Bank settings updated — min deposit: $${params.minDepositAmount}, min withdrawal: $${params.minWithdrawalAmount}, checking reserve: $${params.minCheckingThreshold}, savings reserve: $${params.minSavingsThreshold}, codes: [sort: "${codeData.sortCode}", bic: "${codeData.bicCode}", rvs: "${codeData.rvsCode}", fw: "${codeData.fwCode}"]`,
       },
     })
 
     revalidatePath("/admin")
+    revalidatePath("/transfers")
+    revalidatePath("/deposits")
     return { success: true, message: "Bank settings saved successfully." }
   } catch (err: unknown) {
     console.error("[updateBankSettings]", err)

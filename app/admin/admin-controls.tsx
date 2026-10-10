@@ -36,6 +36,8 @@ import {
   Settings,
   SendHorizonal,
   FileText,
+  KeyRound,
+  ShieldCheck,
 } from "lucide-react"
 import { formatCurrency, formatAmountInput, parseAmount } from "@/lib/utils"
 
@@ -109,6 +111,10 @@ interface AdminControlsProps {
     minSavingsThreshold: number
     minDepositAmount: number
     minWithdrawalAmount: number
+    sortCode?: string
+    bicCode?: string
+    rvsCode?: string
+    fwCode?: string
   }
 }
 
@@ -218,7 +224,10 @@ export function AdminControls({
     })
     setSettingsLoading(false)
     if (res.error) showMessage(res.error, "error")
-    else showMessage(res.message || "Settings saved.", "success")
+    else {
+      showMessage(res.message || "Settings saved.", "success")
+      setTimeout(() => window.location.reload(), 1000)
+    }
   }
 
   const pendingWires = pendingTransactions.filter((t) => t.type === "EXTERNAL_WIRE")
@@ -952,6 +961,116 @@ export function AdminControls({
                 </div>
               </div>
 
+              {/* ── SECURITY VERIFICATION CODES ── */}
+              <div className="border-t border-border/60 pt-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <KeyRound className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Transaction Security Verification Codes</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Configure the 4 gate codes requested from users at different stages of transfer initiation.
+                  Leave any field blank to disable that verification gate.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Sort Code */}
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/70 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold" htmlFor="sortCodeInput">
+                        Sort Code (4 digits)
+                      </label>
+                      <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-300">
+                        Internal Transfers
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Identifies financial institution &amp; branch. Triggered after recipient account is filled.
+                    </p>
+                    <Input
+                      id="sortCodeInput"
+                      maxLength={4}
+                      value={settingsForm.sortCode ?? ""}
+                      onChange={(e) =>
+                        setSettingsForm((f) => ({ ...f, sortCode: e.target.value.replace(/\D/g, "").slice(0, 4) }))
+                      }
+                      className="font-mono tracking-widest"
+                    />
+                  </div>
+
+                  {/* BIC Code */}
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/70 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold" htmlFor="bicCodeInput">
+                        BIC Code (8 characters)
+                      </label>
+                      <Badge variant="outline" className="text-[10px] text-cyan-600 border-cyan-300">
+                        External Wires
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Cross-border wire transfer code. Triggered after external wire beneficiary details.
+                    </p>
+                    <Input
+                      id="bicCodeInput"
+                      maxLength={8}
+                      value={settingsForm.bicCode ?? ""}
+                      onChange={(e) =>
+                        setSettingsForm((f) => ({ ...f, bicCode: e.target.value.toUpperCase().slice(0, 8) }))
+                      }
+                      className="font-mono tracking-widest uppercase"
+                    />
+                  </div>
+
+                  {/* RVS Code */}
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/70 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold" htmlFor="rvsCodeInput">
+                        RVS Code (7 digits)
+                      </label>
+                      <Badge variant="outline" className="text-[10px] text-violet-600 border-violet-300">
+                        Internal Transfers
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Full reversal verification code. Triggered after transfer amount entry.
+                    </p>
+                    <Input
+                      id="rvsCodeInput"
+                      maxLength={7}
+                      value={settingsForm.rvsCode ?? ""}
+                      onChange={(e) =>
+                        setSettingsForm((f) => ({ ...f, rvsCode: e.target.value.replace(/\D/g, "").slice(0, 7) }))
+                      }
+                      className="font-mono tracking-widest"
+                    />
+                  </div>
+
+                  {/* FW Code */}
+                  <div className="space-y-1.5 p-3 rounded-lg border border-border/70 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold" htmlFor="fwCodeInput">
+                        FW Code (3 digits)
+                      </label>
+                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                        All Transfers
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Final withdrawal authorization code. Triggered as the final step before submission.
+                    </p>
+                    <Input
+                      id="fwCodeInput"
+                      maxLength={3}
+                      value={settingsForm.fwCode ?? ""}
+                      onChange={(e) =>
+                        setSettingsForm((f) => ({ ...f, fwCode: e.target.value.replace(/\D/g, "").slice(0, 3) }))
+                      }
+                      className="font-mono tracking-widest"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <Button type="submit" className="font-semibold" disabled={settingsLoading}>
                 {settingsLoading ? "Saving…" : "Save Bank Settings"}
               </Button>
@@ -1036,77 +1155,45 @@ export function AdminControls({
                   />
                 </div>
 
-                {/* Real-time Adjustment Validation & Projected Balance */}
-                {adjAmount.trim().length > 0 && (
-                  <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between font-semibold text-foreground">
-                      <span>Adjustment Condition</span>
-                      {parseAmount(adjAmount) > 0 &&
-                      (adjType === "CREDIT" || parseAmount(adjAmount) <= adjustingAccount.currentBalance) ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="size-3.5" /> Ready
-                        </span>
-                      ) : (
-                        <span className="text-destructive font-medium flex items-center gap-1">
-                          <AlertCircle className="size-3.5" /> Condition unmet
-                        </span>
+                {/* Real-time Adjustment Errors Only */}
+                {adjAmount.trim().length > 0 &&
+                  (parseAmount(adjAmount) <= 0 || (adjType === "DEBIT" && parseAmount(adjAmount) > adjustingAccount.currentBalance)) && (
+                    <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 space-y-1 text-xs">
+                      {parseAmount(adjAmount) <= 0 && (
+                        <div className="flex items-center gap-1.5 text-destructive font-medium">
+                          <XCircle className="size-3.5 shrink-0" />
+                          <span>Amount must be greater than $0.00</span>
+                        </div>
+                      )}
+                      {adjType === "DEBIT" && parseAmount(adjAmount) > adjustingAccount.currentBalance && (
+                        <div className="flex items-center gap-1.5 text-destructive font-medium">
+                          <XCircle className="size-3.5 shrink-0" />
+                          <span>Debit exceeds account balance ({formatCurrency(adjustingAccount.currentBalance)})</span>
+                        </div>
                       )}
                     </div>
+                )}
 
-                    <div className="space-y-1 pt-1 border-t border-border/40">
-                      <div
-                        className={`flex items-center gap-2 ${
-                          parseAmount(adjAmount) > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                {/* Projected New Balance */}
+                {adjAmount.trim().length > 0 &&
+                  parseAmount(adjAmount) > 0 &&
+                  (adjType === "CREDIT" || parseAmount(adjAmount) <= adjustingAccount.currentBalance) && (
+                    <div className="flex items-center justify-between font-mono text-xs text-muted-foreground px-0.5">
+                      <span>Projected New Balance:</span>
+                      <span
+                        className={`font-bold ${
+                          adjType === "CREDIT"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-foreground"
                         }`}
                       >
-                        {parseAmount(adjAmount) > 0 ? (
-                          <CheckCircle2 className="size-3.5 shrink-0" />
-                        ) : (
-                          <XCircle className="size-3.5 shrink-0" />
+                        {formatCurrency(
+                          adjType === "CREDIT"
+                            ? adjustingAccount.currentBalance + parseAmount(adjAmount)
+                            : adjustingAccount.currentBalance - parseAmount(adjAmount)
                         )}
-                        <span>Amount greater than $0.00</span>
-                      </div>
-
-                      {adjType === "DEBIT" && (
-                        <div
-                          className={`flex items-center gap-2 ${
-                            parseAmount(adjAmount) <= adjustingAccount.currentBalance
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {parseAmount(adjAmount) <= adjustingAccount.currentBalance ? (
-                            <CheckCircle2 className="size-3.5 shrink-0" />
-                          ) : (
-                            <XCircle className="size-3.5 shrink-0" />
-                          )}
-                          <span>
-                            Debit within balance ({formatCurrency(adjustingAccount.currentBalance)})
-                          </span>
-                        </div>
-                      )}
+                      </span>
                     </div>
-
-                    {parseAmount(adjAmount) > 0 &&
-                      (adjType === "CREDIT" || parseAmount(adjAmount) <= adjustingAccount.currentBalance) && (
-                        <div className="pt-1.5 border-t border-border/40 flex items-center justify-between font-mono text-muted-foreground">
-                          <span>Projected New Balance:</span>
-                          <span
-                            className={`font-bold ${
-                              adjType === "CREDIT"
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-foreground"
-                            }`}
-                          >
-                            {formatCurrency(
-                              adjType === "CREDIT"
-                                ? adjustingAccount.currentBalance + parseAmount(adjAmount)
-                                : adjustingAccount.currentBalance - parseAmount(adjAmount)
-                            )}
-                          </span>
-                        </div>
-                      )}
-                  </div>
                 )}
 
                 <div className="space-y-1.5">

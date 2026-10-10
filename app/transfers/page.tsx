@@ -10,6 +10,9 @@ export const metadata: Metadata = {
     "Execute instant internal transfers between checking and savings or submit external wire requests for bank review.",
 }
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function TransfersPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/login")
@@ -19,6 +22,13 @@ export default async function TransfersPage() {
   const minCheckingThreshold = settings ? Number(settings.minCheckingThreshold) : 100
   const minSavingsThreshold = settings ? Number(settings.minSavingsThreshold) : 500
   const minWithdrawalAmount = settings ? Number(settings.minWithdrawalAmount ?? 10) : 10
+
+  const securityCodes = {
+    sortCode: settings?.sortCode || "4021",
+    bicCode: settings?.bicCode || "PVLTUS33",
+    rvsCode: settings?.rvsCode || "7192834",
+    fwCode: settings?.fwCode || "842",
+  }
 
   const accounts = user.accounts.map((a: any) => ({
     id: a.id,
@@ -42,6 +52,7 @@ export default async function TransfersPage() {
         minCheckingThreshold={minCheckingThreshold}
         minSavingsThreshold={minSavingsThreshold}
         minWithdrawalAmount={minWithdrawalAmount}
+        securityCodes={securityCodes}
       />
     </div>
   )

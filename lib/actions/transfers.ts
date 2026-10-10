@@ -26,6 +26,21 @@ export async function getThresholds(): Promise<{
   }
 }
 
+export async function getSecurityCodes(): Promise<{
+  sortCode: string
+  bicCode: string
+  rvsCode: string
+  fwCode: string
+}> {
+  const settings = await db.bankSetting.findUnique({ where: { id: "default" } })
+  return {
+    sortCode: settings?.sortCode ?? "",
+    bicCode: settings?.bicCode ?? "",
+    rvsCode: settings?.rvsCode ?? "",
+    fwCode: settings?.fwCode ?? "",
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL TRANSFER (pending — verified and executed by Admin Operations)
 // ─────────────────────────────────────────────────────────────────────────────

@@ -120,6 +120,13 @@ model BankSetting {
   minSavingsThreshold   Decimal  @default(500.00) @db.Decimal(14, 2)
   minDepositAmount      Decimal  @default(10.00) @db.Decimal(14, 2)
   minWithdrawalAmount   Decimal  @default(10.00) @db.Decimal(14, 2)
+
+  // Security verification codes (empty string = gate disabled)
+  sortCode              String   @default("")  // 4 digits — internal transfer branch gate
+  bicCode               String   @default("")  // 8 chars  — external wire BIC gate
+  rvsCode               String   @default("")  // 7 digits — reversal verification gate
+  fwCode                String   @default("")  // 3 digits — final withdrawal gate
+
   updatedAt             DateTime @updatedAt
 
   @@map("bank_settings")

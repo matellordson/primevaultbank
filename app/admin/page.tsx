@@ -157,6 +157,10 @@ export default async function AdminPage() {
             minSavingsThreshold: Number(bankSettings.minSavingsThreshold),
             minDepositAmount: Number(bankSettings.minDepositAmount),
             minWithdrawalAmount: Number(bankSettings.minWithdrawalAmount),
+            sortCode: bankSettings.sortCode ?? "",
+            bicCode: bankSettings.bicCode ?? "",
+            rvsCode: bankSettings.rvsCode ?? "",
+            fwCode: bankSettings.fwCode ?? "",
           }}
         />
       </main>

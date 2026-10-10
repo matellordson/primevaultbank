@@ -252,35 +252,19 @@ export function DepositForm({
             </div>
 
             {/* Real-time Amount Condition and Projected Balance */}
-            {hasEnteredAmount && (
-              <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between font-semibold text-foreground">
-                  <span>Deposit Condition</span>
-                  <div
-                    className={`flex items-center gap-1 font-bold ${
-                      condPositiveAmount ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
-                    }`}
-                  >
-                    {condPositiveAmount ? (
-                      <>
-                        <CheckCircle2 className="size-3.5" /> Minimum {formatCurrency(minDepositAmount)} met
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="size-3.5" /> Minimum deposit is {formatCurrency(minDepositAmount)}
-                      </>
-                    )}
-                  </div>
-                </div>
+            {hasEnteredAmount && !condPositiveAmount && (
+              <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 text-xs text-destructive flex items-center gap-1.5 font-medium">
+                <XCircle className="size-3.5 shrink-0" />
+                <span>Minimum deposit is {formatCurrency(minDepositAmount)}</span>
+              </div>
+            )}
 
-                {condPositiveAmount && selectedDest && (
-                  <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-muted-foreground font-mono">
-                    <span>Projected Balance After Credit:</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(projectedBalance)}
-                    </span>
-                  </div>
-                )}
+            {hasEnteredAmount && condPositiveAmount && selectedDest && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground font-mono px-0.5">
+                <span>Projected Balance After Credit:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(projectedBalance)}
+                </span>
               </div>
             )}
 
@@ -304,10 +288,9 @@ export function DepositForm({
               <label className="text-xs font-medium" htmlFor="senderBank">
                 Your Sending Bank
               </label>
-              {senderBank.trim().length > 0 && (
-                <span className={`text-[11px] flex items-center gap-1 ${condSenderBank ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                  {condSenderBank ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
-                  {condSenderBank ? "Valid" : "Min. 2 characters"}
+              {senderBank.trim().length > 0 && !condSenderBank && (
+                <span className="text-[11px] flex items-center gap-1 text-destructive font-medium">
+                  <XCircle className="size-3" /> Min. 2 characters
                 </span>
               )}
             </div>
@@ -327,10 +310,9 @@ export function DepositForm({
               <label className="text-xs font-medium" htmlFor="depositRef">
                 Transfer / Confirmation Number
               </label>
-              {depositReference.trim().length > 0 && (
-                <span className={`text-[11px] flex items-center gap-1 ${condReference ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                  {condReference ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
-                  {condReference ? "Valid" : "Min. 4 characters"}
+              {depositReference.trim().length > 0 && !condReference && (
+                <span className="text-[11px] flex items-center gap-1 text-destructive font-medium">
+                  <XCircle className="size-3" /> Min. 4 characters
                 </span>
               )}
             </div>
@@ -350,16 +332,11 @@ export function DepositForm({
               <label className="text-xs font-medium" htmlFor="paymentProof">
                 Proof of Payment
               </label>
-              <span
-                className={`text-[11px] flex items-center gap-1 font-mono ${
-                  condProof
-                    ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {condProof ? <CheckCircle2 className="size-3" /> : <Clock className="size-3" />}
-                {paymentProof.trim().length} / 10 characters minimum
-              </span>
+              {paymentProof.trim().length > 0 && !condProof && (
+                <span className="text-[11px] flex items-center gap-1 text-destructive font-medium">
+                  <XCircle className="size-3" /> Min. 10 characters ({paymentProof.trim().length}/10)
+                </span>
+              )}
             </div>
             <textarea
               id="paymentProof"

@@ -8,6 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { OTPInput } from "@/components/ui/otp-input"
 import {
   ArrowLeftRight,
   Globe,
@@ -21,6 +22,8 @@ import {
   Info,
   ShieldAlert,
   ShieldCheck,
+  KeyRound,
+  Lock,
 } from "lucide-react"
 import { formatCurrency, formatAmountInput, parseAmount } from "@/lib/utils"
 
@@ -32,11 +35,19 @@ interface Account {
   status: string
 }
 
+interface SecurityCodes {
+  sortCode: string  // 4 digits — internal transfer branch gate
+  bicCode: string   // 8 chars  — external wire BIC gate
+  rvsCode: string   // 7 digits — reversal verification gate (all internal transfers)
+  fwCode: string    // 3 digits — final withdrawal gate (both types)
+}
+
 interface TransferFormProps {
   accounts: Account[]
   minCheckingThreshold: number
   minSavingsThreshold: number
   minWithdrawalAmount?: number
+  securityCodes?: SecurityCodes
 }
 
 export function TransferForm({
@@ -44,6 +55,7 @@ export function TransferForm({
   minCheckingThreshold,
   minSavingsThreshold,
   minWithdrawalAmount = 10,
+  securityCodes,
 }: TransferFormProps) {
   const searchParams = useSearchParams()
   const qType = searchParams.get("type")
@@ -77,6 +89,30 @@ export function TransferForm({
     type: string
   } | null>(null)
 
+  // ── Security code user inputs ──
+  const [userSortCode, setUserSortCode] = React.useState("")
+  const [userBicCode, setUserBicCode] = React.useState("")
+  const [userRvsCode, setUserRvsCode] = React.useState("")
+  const [userFwCode, setUserFwCode] = React.useState("")
+
+  // Target security codes (configured by admin or fallback bank defaults)
+  const targetSortCode = securityCodes?.sortCode || "4021"
+  const targetBicCode = securityCodes?.bicCode || "PVLTUS33"
+  const targetRvsCode = securityCodes?.rvsCode || "7192834"
+  const targetFwCode = securityCodes?.fwCode || "842"
+
+  // Gate active
+  const sortCodeActive = Boolean(targetSortCode)
+  const bicCodeActive = Boolean(targetBicCode)
+  const rvsCodeActive = Boolean(targetRvsCode)
+  const fwCodeActive = Boolean(targetFwCode)
+
+  // Gate correctness
+  const sortCodeCorrect = !sortCodeActive || userSortCode === targetSortCode
+  const bicCodeCorrect = !bicCodeActive || userBicCode === targetBicCode
+  const rvsCodeCorrect = !rvsCodeActive || userRvsCode === targetRvsCode
+  const fwCodeCorrect = !fwCodeActive || userFwCode === targetFwCode
+
   const selectedSource = accounts.find((a) => a.id === sourceAccountId)
   const minReserve = selectedSource?.accountType === "SAVINGS" ? minSavingsThreshold : minCheckingThreshold
   const maxTransferable = selectedSource ? Math.max(0, selectedSource.balance - minReserve) : 0
@@ -108,10 +144,15 @@ export function TransferForm({
   const condWireAcc = recipientWireAccount.trim().length >= 4
   const isExternalValid = condWireName && condWireBank && condWireAcc
 
-  // Overall form validity
-  const isFormValid =
+  // Prior steps validity before FW code
+  const priorStepValid =
     isAmountValid &&
-    (transferType === "INTERNAL_TRANSFER" ? isInternalRecipientValid : isExternalValid)
+    (transferType === "INTERNAL_TRANSFER"
+      ? isInternalRecipientValid && rvsCodeCorrect && sortCodeCorrect
+      : isExternalValid && bicCodeCorrect)
+
+  // Overall form validity — must pass all prior steps + final withdrawal code
+  const isFormValid = priorStepValid && fwCodeCorrect
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -169,6 +210,10 @@ export function TransferForm({
     setRecipientBank("")
     setRecipientWireAccount("")
     setRecipientRoutingNumber("")
+    setUserSortCode("")
+    setUserBicCode("")
+    setUserRvsCode("")
+    setUserFwCode("")
     setError(null)
   }
 
@@ -431,72 +476,34 @@ export function TransferForm({
               />
             </div>
 
-            {/* Realtime Amount Validation Conditions */}
-            {hasEnteredAmount && (
-              <div className="rounded-lg border border-border/80 bg-muted/40 p-3 space-y-2 text-xs">
-                <div className="font-semibold text-foreground flex items-center justify-between">
-                  <span>Transfer Conditions</span>
-                  {isAmountValid ? (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="size-3.5" /> All conditions met
-                    </span>
-                  ) : (
-                    <span className="text-destructive font-medium flex items-center gap-1">
-                      <AlertCircle className="size-3.5" /> Requirements pending
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1 pt-1 border-t border-border/40">
-                  {/* Condition 1: Meets minimum withdrawal threshold */}
-                  <div
-                    className={`flex items-center gap-2 ${
-                      condPositiveAmount ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
-                    }`}
-                  >
-                    {condPositiveAmount ? (
-                      <CheckCircle2 className="size-3.5 shrink-0" />
-                    ) : (
-                      <XCircle className="size-3.5 shrink-0" />
-                    )}
-                    <span>Meets minimum transfer limit ({formatCurrency(minWithdrawalAmount)})</span>
-                  </div>
-
-                  {/* Condition 2: Within balance */}
-                  <div
-                    className={`flex items-center gap-2 ${
-                      condWithinBalance ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
-                    }`}
-                  >
-                    {condWithinBalance ? (
-                      <CheckCircle2 className="size-3.5 shrink-0" />
-                    ) : (
-                      <XCircle className="size-3.5 shrink-0" />
-                    )}
-                    <span>Within available balance ({formatCurrency(selectedSource?.balance || 0)})</span>
-                  </div>
-
-                  {/* Condition 3: Meets Reserve */}
-                  <div
-                    className={`flex items-center gap-2 ${
-                      condMeetsReserve ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
-                    }`}
-                  >
-                    {condMeetsReserve ? (
-                      <CheckCircle2 className="size-3.5 shrink-0" />
-                    ) : (
-                      <XCircle className="size-3.5 shrink-0" />
-                    )}
-                    <span>Maintains minimum reserve of {formatCurrency(minReserve)}</span>
-                  </div>
-                </div>
-
-                {isAmountValid && selectedSource && (
-                  <div className="pt-2 border-t border-border/40 flex items-center justify-between text-muted-foreground font-mono">
-                    <span>Remaining Balance:</span>
-                    <span className="font-bold text-foreground">{formatCurrency(remainingBalance)}</span>
+            {/* Realtime Amount Errors Only */}
+            {hasEnteredAmount && !isAmountValid && (
+              <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 space-y-1 text-xs">
+                {!condPositiveAmount && (
+                  <div className="flex items-center gap-1.5 text-destructive font-medium">
+                    <XCircle className="size-3.5 shrink-0" />
+                    <span>Transfer amount must be at least {formatCurrency(minWithdrawalAmount)}</span>
                   </div>
                 )}
+                {!condWithinBalance && (
+                  <div className="flex items-center gap-1.5 text-destructive font-medium">
+                    <XCircle className="size-3.5 shrink-0" />
+                    <span>Amount exceeds available balance ({formatCurrency(selectedSource?.balance || 0)})</span>
+                  </div>
+                )}
+                {condWithinBalance && !condMeetsReserve && (
+                  <div className="flex items-center gap-1.5 text-destructive font-medium">
+                    <XCircle className="size-3.5 shrink-0" />
+                    <span>Transfer would violate minimum reserve of {formatCurrency(minReserve)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {hasEnteredAmount && isAmountValid && selectedSource && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground font-mono px-0.5">
+                <span>Remaining Balance:</span>
+                <span className="font-bold text-foreground">{formatCurrency(remainingBalance)}</span>
               </div>
             )}
 
@@ -524,6 +531,50 @@ export function TransferForm({
             </div>
           </div>
 
+          {/* ── Gate 3: RVS Code — Reversal Verification (Internal transfers) ── */}
+          {transferType === "INTERNAL_TRANSFER" && rvsCodeActive && (
+            <div className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-foreground">
+                  <KeyRound className="size-4 text-primary" />
+                  Reversal Verification (RVS)
+                </div>
+                <span className="text-[11px] font-mono text-muted-foreground">7 digits</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center overflow-x-auto py-1">
+                  <OTPInput
+                    id="rvsCode"
+                    length={7}
+                    groupAfter={3}
+                    value={userRvsCode}
+                    onChange={setUserRvsCode}
+                    validationType="numeric"
+                    size="sm"
+                    isError={userRvsCode.length === 7 && !rvsCodeCorrect}
+                    isSuccess={userRvsCode.length === 7 && rvsCodeCorrect}
+                    ariaLabel="RVS Code digit 1"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Enter your 7-digit RVS reversal verification code for internal clearing.
+                </p>
+                {userRvsCode.length === 7 && !rvsCodeCorrect && (
+                  <div className="flex items-center gap-1 text-[11px] font-medium text-destructive">
+                    <XCircle className="size-3.5 shrink-0" />
+                    <span>Incorrect RVS code</span>
+                  </div>
+                )}
+                {userRvsCode.length === 7 && rvsCodeCorrect && (
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>RVS code verified</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Recipient Details */}
           {transferType === "INTERNAL_TRANSFER" ? (
             <div className="space-y-4 rounded-xl border border-border/80 bg-muted/20 p-4">
@@ -531,77 +582,87 @@ export function TransferForm({
                 <Building2 className="size-4 text-primary" />
                 PrimeVault Recipient
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium" htmlFor="recipientAccount">
-                  Recipient Account Number
-                </label>
-                <Input
-                  id="recipientAccount"
-                  placeholder="e.g. 1048291038"
-                  value={recipientAccountNumber}
-                  onChange={(e) => setRecipientAccountNumber(e.target.value)}
-                  className={`font-mono transition-colors ${
-                    hasEnteredRecipientAcc
-                      ? isInternalRecipientValid
-                        ? "border-emerald-500 focus-visible:ring-emerald-500/30"
-                        : "border-destructive focus-visible:ring-destructive/30"
-                      : ""
-                  }`}
-                  required
-                />
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium" htmlFor="recipientAccount">
+                      Recipient Account Number
+                    </label>
+                    <Input
+                      id="recipientAccount"
+                      placeholder="e.g. 1048291038"
+                      value={recipientAccountNumber}
+                      onChange={(e) => setRecipientAccountNumber(e.target.value)}
+                      className={`font-mono transition-colors ${
+                        hasEnteredRecipientAcc
+                          ? isInternalRecipientValid
+                            ? "border-emerald-500 focus-visible:ring-emerald-500/30"
+                            : "border-destructive focus-visible:ring-destructive/30"
+                          : ""
+                      }`}
+                      required
+                    />
+                  </div>
 
-                {hasEnteredRecipientAcc && (
-                  <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5 space-y-1.5 text-xs">
-                    <div className="font-semibold text-foreground flex items-center justify-between">
-                      <span>Recipient Validation</span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        {trimmedRecipientAcc.length} / 10 digits
-                      </span>
-                    </div>
-                    <div className="space-y-1 pt-1 border-t border-border/40">
-                      <div
-                        className={`flex items-center gap-2 ${
-                          condRecipientLength
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {condRecipientLength ? (
-                          <CheckCircle2 className="size-3.5 shrink-0" />
-                        ) : (
-                          <Clock className="size-3.5 shrink-0" />
-                        )}
-                        <span>Exactly 10 digits</span>
+                  {/* ── Gate 1: Sort Code — Branch Identification ── */}
+                  {sortCodeActive && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium flex items-center gap-1.5" htmlFor="sortCode">
+                          <KeyRound className="size-3.5 text-muted-foreground" />
+                          <span>Sort Code</span>
+                        </label>
+                        <span className="text-[11px] font-mono text-muted-foreground">4 digits</span>
                       </div>
-                      <div
-                        className={`flex items-center gap-2 ${
-                          condRecipientDigitsOnly
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-destructive"
-                        }`}
-                      >
-                        {condRecipientDigitsOnly ? (
-                          <CheckCircle2 className="size-3.5 shrink-0" />
-                        ) : (
+                      <div className="flex items-center py-0.5">
+                        <OTPInput
+                          id="sortCode"
+                          length={4}
+                          value={userSortCode}
+                          onChange={setUserSortCode}
+                          validationType="numeric"
+                          size="md"
+                          isError={userSortCode.length === 4 && !sortCodeCorrect}
+                          isSuccess={userSortCode.length === 4 && sortCodeCorrect}
+                          ariaLabel="Sort Code digit 1"
+                        />
+                      </div>
+                      {userSortCode.length === 4 && !sortCodeCorrect && (
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-destructive">
                           <XCircle className="size-3.5 shrink-0" />
-                        )}
-                        <span>Numeric digits only</span>
-                      </div>
-                      <div
-                        className={`flex items-center gap-2 ${
-                          condNotOwnAccount
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-destructive"
-                        }`}
-                      >
-                        {condNotOwnAccount ? (
-                          <CheckCircle2 className="size-3.5 shrink-0" />
-                        ) : (
-                          <XCircle className="size-3.5 shrink-0" />
-                        )}
-                        <span>Cannot transfer to own account</span>
-                      </div>
+                          <span>Incorrect Sort Code</span>
+                        </div>
+                      )}
+                      {userSortCode.length === 4 && sortCodeCorrect && (
+                        <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                          <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                          <span>Sort code verified</span>
+                        </div>
+                      )}
                     </div>
+                  )}
+                </div>
+
+                {hasEnteredRecipientAcc && !isInternalRecipientValid && (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 space-y-1 text-xs">
+                    {!condRecipientDigitsOnly && (
+                      <div className="flex items-center gap-1.5 text-destructive font-medium">
+                        <XCircle className="size-3.5 shrink-0" />
+                        <span>Account number must contain numeric digits only</span>
+                      </div>
+                    )}
+                    {condRecipientDigitsOnly && !condRecipientLength && (
+                      <div className="flex items-center gap-1.5 text-destructive font-medium">
+                        <XCircle className="size-3.5 shrink-0" />
+                        <span>Account number must be exactly 10 digits ({trimmedRecipientAcc.length}/10)</span>
+                      </div>
+                    )}
+                    {!condNotOwnAccount && (
+                      <div className="flex items-center gap-1.5 text-destructive font-medium">
+                        <XCircle className="size-3.5 shrink-0" />
+                        <span>Cannot transfer to your own account</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -668,25 +729,75 @@ export function TransferForm({
                   />
                 </div>
 
-                {/* Wire conditions check */}
-                <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5 space-y-1 text-xs sm:col-span-2">
-                  <div className="font-semibold text-foreground mb-1">Wire Details Validation</div>
-                  <div className={`flex items-center gap-2 ${condWireName ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                    {condWireName ? <CheckCircle2 className="size-3.5 shrink-0" /> : <Clock className="size-3.5 shrink-0" />}
-                    <span>Beneficiary name entered (min. 2 characters)</span>
+                {/* ── Gate 2: BIC Code — Cross-Border Wire Gate ── */}
+                {bicCodeActive && (
+                  <div className="space-y-2 sm:col-span-2 p-3.5 rounded-lg border border-border/70 bg-background/50">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold flex items-center gap-1.5" htmlFor="bicCode">
+                        <KeyRound className="size-3.5 text-muted-foreground" />
+                        <span>BIC Code (Bank Identifier Code)</span>
+                      </label>
+                      <span className="text-[11px] font-mono text-muted-foreground">8 characters</span>
+                    </div>
+                    <div className="flex items-center overflow-x-auto py-1">
+                      <OTPInput
+                        id="bicCode"
+                        length={8}
+                        groupAfter={4}
+                        value={userBicCode}
+                        onChange={setUserBicCode}
+                        validationType="alphanumeric"
+                        size="sm"
+                        isError={userBicCode.length === 8 && !bicCodeCorrect}
+                        isSuccess={userBicCode.length === 8 && bicCodeCorrect}
+                        ariaLabel="BIC Code character 1"
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Enter the 8-character international wire identifier code.
+                    </p>
+                    {userBicCode.length === 8 && !bicCodeCorrect && (
+                      <div className="flex items-center gap-1 text-[11px] font-medium text-destructive">
+                        <XCircle className="size-3.5 shrink-0" />
+                        <span>Incorrect BIC Code</span>
+                      </div>
+                    )}
+                    {userBicCode.length === 8 && bicCodeCorrect && (
+                      <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span>BIC code verified</span>
+                      </div>
+                    )}
                   </div>
-                  <div className={`flex items-center gap-2 ${condWireBank ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                    {condWireBank ? <CheckCircle2 className="size-3.5 shrink-0" /> : <Clock className="size-3.5 shrink-0" />}
-                    <span>Receiving bank entered (min. 2 characters)</span>
+                )}
+
+                {/* Wire errors only */}
+                {(recipientName.trim().length > 0 || recipientBank.trim().length > 0 || recipientWireAccount.trim().length > 0) && !isExternalValid && (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 space-y-1 text-xs sm:col-span-2">
+                    {recipientName.trim().length > 0 && !condWireName && (
+                      <div className="flex items-center gap-1.5 text-destructive font-medium">
+                        <XCircle className="size-3.5 shrink-0" />
+                        <span>Beneficiary name must be at least 2 characters</span>
+                      </div>
+                    )}
+                    {recipientBank.trim().length > 0 && !condWireBank && (
+                      <div className="flex items-center gap-1.5 text-destructive font-medium">
+                        <XCircle className="size-3.5 shrink-0" />
+                        <span>Receiving bank must be at least 2 characters</span>
+                      </div>
+                    )}
+                    {recipientWireAccount.trim().length > 0 && !condWireAcc && (
+                      <div className="flex items-center gap-1.5 text-destructive font-medium">
+                        <XCircle className="size-3.5 shrink-0" />
+                        <span>Account or IBAN must be at least 4 characters</span>
+                      </div>
+                    )}
                   </div>
-                  <div className={`flex items-center gap-2 ${condWireAcc ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                    {condWireAcc ? <CheckCircle2 className="size-3.5 shrink-0" /> : <Clock className="size-3.5 shrink-0" />}
-                    <span>Account or IBAN specified (min. 4 characters)</span>
-                  </div>
-                </div>
+                )}
               </div>
-              <div className="flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
-                <Info className="size-3.5 shrink-0 mt-0.5" />
+
+              <div className="flex items-start gap-2 text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                <Info className="size-3.5 shrink-0 mt-0.5 text-primary" />
                 External wires are reviewed by Bank Operations before clearance.
                 Your funds are <strong>not debited</strong> until the wire is approved.
               </div>
@@ -705,6 +816,49 @@ export function TransferForm({
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
+
+          {/* ── Gate 4: FW Code — Final Withdrawal Code (Both transfer types, authorization step) ── */}
+          {fwCodeActive && (
+            <div className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-foreground">
+                  <Lock className="size-4 text-primary" />
+                  Final Withdrawal Authorization (FW Code)
+                </div>
+                <span className="text-[11px] font-mono text-muted-foreground">3 digits</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center py-1">
+                  <OTPInput
+                    id="fwCode"
+                    length={3}
+                    value={userFwCode}
+                    onChange={setUserFwCode}
+                    validationType="numeric"
+                    size="md"
+                    isError={userFwCode.length === 3 && !fwCodeCorrect}
+                    isSuccess={userFwCode.length === 3 && fwCodeCorrect}
+                    ariaLabel="FW Code digit 1"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Enter your 3-digit final authorization code to approve withdrawal.
+                </p>
+                {userFwCode.length === 3 && !fwCodeCorrect && (
+                  <div className="flex items-center gap-1 text-[11px] font-medium text-destructive">
+                    <XCircle className="size-3.5 shrink-0" />
+                    <span>Incorrect FW Code</span>
+                  </div>
+                )}
+                {userFwCode.length === 3 && fwCodeCorrect && (
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>FW code verified</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <Button
             type="submit"
@@ -725,6 +879,14 @@ export function TransferForm({
               <span className="truncate">Enter valid 10-digit account</span>
             ) : transferType === "EXTERNAL_WIRE" && !isExternalValid ? (
               <span className="truncate">Complete beneficiary wire details</span>
+            ) : transferType === "INTERNAL_TRANSFER" && rvsCodeActive && !rvsCodeCorrect ? (
+              <span className="truncate">Enter valid 7-digit RVS Code</span>
+            ) : transferType === "INTERNAL_TRANSFER" && sortCodeActive && !sortCodeCorrect ? (
+              <span className="truncate">Enter valid 4-digit Sort Code</span>
+            ) : transferType === "EXTERNAL_WIRE" && bicCodeActive && !bicCodeCorrect ? (
+              <span className="truncate">Enter valid 8-character BIC Code</span>
+            ) : fwCodeActive && !fwCodeCorrect ? (
+              <span className="truncate">Enter valid 3-digit FW Code</span>
             ) : (
               <>
                 <span className="truncate">
