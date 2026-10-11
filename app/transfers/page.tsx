@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { getUserActiveVerification } from "@/lib/actions/transfers"
 import { TransferForm } from "./transfer-form"
 
 export const metadata: Metadata = {
@@ -23,12 +24,7 @@ export default async function TransfersPage() {
   const minSavingsThreshold = settings ? Number(settings.minSavingsThreshold) : 500
   const minWithdrawalAmount = settings ? Number(settings.minWithdrawalAmount ?? 10) : 10
 
-  const securityCodes = {
-    sortCode: settings?.sortCode || "4021",
-    bicCode: settings?.bicCode || "PVLTUS33",
-    rvsCode: settings?.rvsCode || "7192834",
-    fwCode: settings?.fwCode || "842",
-  }
+  const activeVerification = await getUserActiveVerification()
 
   const accounts = user.accounts.map((a: any) => ({
     id: a.id,
@@ -52,7 +48,8 @@ export default async function TransfersPage() {
         minCheckingThreshold={minCheckingThreshold}
         minSavingsThreshold={minSavingsThreshold}
         minWithdrawalAmount={minWithdrawalAmount}
-        securityCodes={securityCodes}
+        userTransferLimit={user.transferLimit ? Number(user.transferLimit) : 10000}
+        initialActiveVerification={activeVerification}
       />
     </div>
   )

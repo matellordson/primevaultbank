@@ -7,6 +7,10 @@ import {
   adjustBalance,
   toggleAccountStatus,
   updateBankSettings,
+  adminFastForwardBic,
+  adminFastForwardRvs,
+  adminClearLimitHold,
+  updateUserTransferLimit,
 } from "@/lib/actions/admin"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,6 +42,8 @@ import {
   FileText,
   KeyRound,
   ShieldCheck,
+  Zap,
+  Sliders,
 } from "lucide-react"
 import { formatCurrency, formatAmountInput, parseAmount } from "@/lib/utils"
 
@@ -66,6 +72,10 @@ interface PendingTx {
   senderBank?: string | null
   depositReference?: string | null
   paymentProof?: string | null
+  verificationPhase?: string | null
+  bicReleaseAt?: string | null
+  rvsReleaseAt?: string | null
+  limitClearedAt?: string | null
 }
 
 interface AdminControlsProps {
@@ -84,6 +94,7 @@ interface AdminControlsProps {
     name: string
     email: string
     role: string
+    transferLimit?: number | null
     createdAt: string
     accounts: {
       id: string
@@ -150,6 +161,16 @@ export function AdminControls({
   // Proof viewer modal
   const [viewingTx, setViewingTx] = React.useState<PendingTx | null>(null)
 
+  // User transfer limit modal
+  const [adjustingLimitUser, setAdjustingLimitUser] = React.useState<{
+    id: string
+    name: string
+    email: string
+    currentLimit: number
+  } | null>(null)
+  const [newLimit, setNewLimit] = React.useState("")
+  const [limitLoading, setLimitLoading] = React.useState(false)
+
   // Bank Settings form state
   const [settingsForm, setSettingsForm] = React.useState(bankSettings)
   const [settingsLoading, setSettingsLoading] = React.useState(false)
@@ -212,6 +233,26 @@ export function AdminControls({
     else { showMessage(res.message || "Status changed.", "success"); setTimeout(() => window.location.reload(), 1200) }
   }
 
+  async function handleUpdateLimitSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!adjustingLimitUser) return
+    const parsed = parseAmount(newLimit)
+    if (parsed < 0) {
+      showMessage("Please enter a valid transfer limit (0 or greater).", "error")
+      return
+    }
+    setLimitLoading(true)
+    const res = await updateUserTransferLimit(adjustingLimitUser.id, parsed)
+    setLimitLoading(false)
+    if (res.error) {
+      showMessage(res.error, "error")
+    } else {
+      setAdjustingLimitUser(null)
+      showMessage(res.message || "Transfer limit updated successfully.", "success")
+      setTimeout(() => window.location.reload(), 1000)
+    }
+  }
+
   async function handleSettingsSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSettingsLoading(true)
@@ -230,8 +271,49 @@ export function AdminControls({
     }
   }
 
-  const pendingWires = pendingTransactions.filter((t) => t.type === "EXTERNAL_WIRE")
+  const pendingWires = pendingTransactions.filter(
+    (t) => t.type === "EXTERNAL_WIRE" || t.type === "INTERNAL_TRANSFER"
+  )
   const pendingDeposits = pendingTransactions.filter((t) => t.type === "DEPOSIT_REQUEST")
+
+  async function handleFastForwardBic(id: string) {
+    setProcessingId(id)
+    const res = await adminFastForwardBic(id)
+    setProcessingId(null)
+    if (res.error) showMessage(res.error, "error")
+    else { showMessage(res.message || "BIC code unlocked.", "success"); setTimeout(() => window.location.reload(), 1200) }
+  }
+
+  async function handleFastForwardRvs(id: string) {
+    setProcessingId(id)
+    const res = await adminFastForwardRvs(id)
+    setProcessingId(null)
+    if (res.error) showMessage(res.error, "error")
+    else { showMessage(res.message || "RVRS code unlocked.", "success"); setTimeout(() => window.location.reload(), 1200) }
+  }
+
+  async function handleClearLimitHold(id: string) {
+    setProcessingId(id)
+    const res = await adminClearLimitHold(id)
+    setProcessingId(null)
+    if (res.error) showMessage(res.error, "error")
+    else { showMessage(res.message || "Limit authorized. FW code unlocked.", "success"); setTimeout(() => window.location.reload(), 1200) }
+  }
+
+  function getPhaseLabel(phase?: string | null) {
+    switch (phase) {
+      case "SORT_CODE_REQUIRED": return { label: "Phase 1: Sort Code", color: "bg-violet-100 text-violet-800 border-violet-200" }
+      case "REVIEW_BIC": return { label: "Phase 2: BIC Review", color: "bg-amber-100 text-amber-800 border-amber-200" }
+      case "BIC_REQUIRED": return { label: "Phase 2: BIC Code", color: "bg-blue-100 text-blue-800 border-blue-200" }
+      case "REVIEW_RVS": return { label: "Phase 3: RVRS Review", color: "bg-amber-100 text-amber-800 border-amber-200" }
+      case "RVS_REQUIRED": return { label: "Phase 3: RVRS Code", color: "bg-cyan-100 text-cyan-800 border-cyan-200" }
+      case "LIMIT_HOLD": return { label: "Phase 4: Limit Hold", color: "bg-rose-100 text-rose-800 border-rose-200" }
+      case "FW_REQUIRED": return { label: "Phase 5: Final Code", color: "bg-orange-100 text-orange-800 border-orange-200" }
+      case "COMPLETED": return { label: "Verified", color: "bg-emerald-100 text-emerald-800 border-emerald-200" }
+      default: return null
+    }
+  }
+
 
   const tabs: { id: Tab; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: "PENDING", label: "Transfer Queue", icon: SendHorizonal, badge: stats.wireCount },
@@ -350,44 +432,86 @@ export function AdminControls({
               <>
                 {/* Mobile card list */}
                 <div className="sm:hidden divide-y divide-border/60">
-                  {pendingWires.map((tx) => (
-                    <div key={tx.id} className="py-4 space-y-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="font-mono text-xs font-bold">{tx.referenceId}</div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {new Date(tx.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {pendingWires.map((tx) => {
+                    const phase = getPhaseLabel(tx.verificationPhase)
+                    return (
+                      <div key={tx.id} className="py-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="font-mono text-xs font-bold">{tx.referenceId}</div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {new Date(tx.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                            {phase && (
+                              <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${phase.color}`}>
+                                {phase.label}
+                              </span>
+                            )}
                           </div>
+                          <span className="font-mono font-bold text-base">{formatCurrency(tx.amount)}</span>
                         </div>
-                        <span className="font-mono font-bold text-base">{formatCurrency(tx.amount)}</span>
+                        <div className="text-xs space-y-1">
+                          <div><span className="text-muted-foreground">From: </span><span className="font-semibold">{tx.senderName}</span> <span className="font-mono text-muted-foreground">•••• {tx.senderAccount.slice(-4)}</span></div>
+                          <div><span className="text-muted-foreground">To: </span><span className="font-semibold">{tx.recipientName || "N/A"}</span> {tx.recipientBank && <span className="text-muted-foreground">– {tx.recipientBank}</span>}</div>
+                        </div>
+                        {/* Phase-specific admin bypass actions */}
+                        {tx.verificationPhase === "REVIEW_BIC" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleFastForwardBic(tx.id)}
+                            disabled={processingId === tx.id}
+                            className="w-full bg-amber-500 hover:bg-amber-600 text-white gap-1 text-xs h-8"
+                          >
+                            <Zap className="size-3.5" />
+                            Release BIC Now
+                          </Button>
+                        )}
+                        {tx.verificationPhase === "REVIEW_RVS" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleFastForwardRvs(tx.id)}
+                            disabled={processingId === tx.id}
+                            className="w-full bg-amber-500 hover:bg-amber-600 text-white gap-1 text-xs h-8"
+                          >
+                            <Zap className="size-3.5" />
+                            Release RVRS Now
+                          </Button>
+                        )}
+                        {tx.verificationPhase === "LIMIT_HOLD" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleClearLimitHold(tx.id)}
+                            disabled={processingId === tx.id}
+                            className="w-full bg-rose-600 hover:bg-rose-700 text-white gap-1 text-xs h-8"
+                          >
+                            <ShieldCheck className="size-3.5" />
+                            Authorize Limit & Release FW
+                          </Button>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleApprove(tx.id)}
+                            disabled={processingId === tx.id}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-9"
+                          >
+                            <CheckCircle2 className="size-3.5" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setRejectingId(tx.id)}
+                            disabled={processingId === tx.id}
+                            className="flex-1 gap-1 text-xs h-9"
+                          >
+                            <XCircle className="size-3.5" />
+                            Decline
+                          </Button>
+                        </div>
                       </div>
-                      <div className="text-xs space-y-1">
-                        <div><span className="text-muted-foreground">From: </span><span className="font-semibold">{tx.senderName}</span> <span className="font-mono text-muted-foreground">•••• {tx.senderAccount.slice(-4)}</span></div>
-                        <div><span className="text-muted-foreground">To: </span><span className="font-semibold">{tx.recipientName || "N/A"}</span> {tx.recipientBank && <span className="text-muted-foreground">– {tx.recipientBank}</span>}</div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleApprove(tx.id)}
-                          disabled={processingId === tx.id}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-9"
-                        >
-                          <CheckCircle2 className="size-3.5" />
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => setRejectingId(tx.id)}
-                          disabled={processingId === tx.id}
-                          className="flex-1 gap-1 text-xs h-9"
-                        >
-                          <XCircle className="size-3.5" />
-                          Decline
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Desktop table */}
@@ -399,65 +523,111 @@ export function AdminControls({
                         <TableHead>From Account</TableHead>
                         <TableHead>Beneficiary</TableHead>
                         <TableHead>Amount</TableHead>
+                        <TableHead>Verification Phase</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pendingWires.map((tx) => (
-                        <TableRow key={tx.id}>
-                          <TableCell>
-                            <div className="font-mono text-xs font-bold">{tx.referenceId}</div>
-                            <div className="text-[11px] text-muted-foreground">
-                              {new Date(tx.createdAt).toLocaleString("en-US", {
-                                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                              })}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-xs font-semibold">{tx.senderName}</div>
-                            <div className="font-mono text-[11px] text-muted-foreground">
-                              •••• {tx.senderAccount.slice(-4)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-xs font-semibold">{tx.recipientName || "N/A"}</div>
-                            <div className="text-[11px] text-muted-foreground">
-                              {tx.recipientBank} {tx.recipientAccountNumber ? `(${tx.recipientAccountNumber})` : ""}
-                            </div>
-                            {tx.recipientRoutingNumber && (
-                              <div className="text-[10px] text-muted-foreground/70">
-                                Routing: {tx.recipientRoutingNumber}
+                      {pendingWires.map((tx) => {
+                        const phase = getPhaseLabel(tx.verificationPhase)
+                        return (
+                          <TableRow key={tx.id}>
+                            <TableCell>
+                              <div className="font-mono text-xs font-bold">{tx.referenceId}</div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {new Date(tx.createdAt).toLocaleString("en-US", {
+                                  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                                })}
                               </div>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-mono font-bold text-sm">{formatCurrency(tx.amount)}</span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleApprove(tx.id)}
-                                disabled={processingId === tx.id}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-8"
-                              >
-                                <CheckCircle2 className="size-3.5" />
-                                Approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => setRejectingId(tx.id)}
-                                disabled={processingId === tx.id}
-                                className="gap-1 text-xs h-8"
-                              >
-                                <XCircle className="size-3.5" />
-                                Decline
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-xs font-semibold">{tx.senderName}</div>
+                              <div className="font-mono text-[11px] text-muted-foreground">
+                                •••• {tx.senderAccount.slice(-4)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-xs font-semibold">{tx.recipientName || "N/A"}</div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {tx.recipientBank} {tx.recipientAccountNumber ? `(${tx.recipientAccountNumber})` : ""}
+                              </div>
+                              {tx.recipientRoutingNumber && (
+                                <div className="text-[10px] text-muted-foreground/70">
+                                  Routing: {tx.recipientRoutingNumber}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-mono font-bold text-sm">{formatCurrency(tx.amount)}</span>
+                            </TableCell>
+                            <TableCell>
+                              {phase ? (
+                                <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded border ${phase.color}`}>
+                                  {phase.label}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2 flex-wrap">
+                                {tx.verificationPhase === "REVIEW_BIC" && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleFastForwardBic(tx.id)}
+                                    disabled={processingId === tx.id}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white gap-1 text-xs h-8"
+                                  >
+                                    <Zap className="size-3.5" />
+                                    Release BIC
+                                  </Button>
+                                )}
+                                {tx.verificationPhase === "REVIEW_RVS" && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleFastForwardRvs(tx.id)}
+                                    disabled={processingId === tx.id}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white gap-1 text-xs h-8"
+                                  >
+                                    <Zap className="size-3.5" />
+                                    Release RVRS
+                                  </Button>
+                                )}
+                                {tx.verificationPhase === "LIMIT_HOLD" && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleClearLimitHold(tx.id)}
+                                    disabled={processingId === tx.id}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white gap-1 text-xs h-8"
+                                  >
+                                    <ShieldCheck className="size-3.5" />
+                                    Authorize Limit
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApprove(tx.id)}
+                                  disabled={processingId === tx.id}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs h-8"
+                                >
+                                  <CheckCircle2 className="size-3.5" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => setRejectingId(tx.id)}
+                                  disabled={processingId === tx.id}
+                                  className="gap-1 text-xs h-8"
+                                >
+                                  <XCircle className="size-3.5" />
+                                  Decline
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -652,7 +822,7 @@ export function AdminControls({
               <div className="space-y-5">
                 {users.map((user) => (
                   <div key={user.id} className="p-4 rounded-xl border border-border/80 bg-card space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-border/60">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold">{user.name}</span>
@@ -662,8 +832,35 @@ export function AdminControls({
                         </div>
                         <div className="text-xs text-muted-foreground">{user.email}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Joined: {new Date(user.createdAt).toLocaleDateString()}
+
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs">
+                          <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-muted-foreground text-[11px]">Transfer Limit:</span>
+                          <span className="font-mono font-bold text-foreground">
+                            {formatCurrency(user.transferLimit ?? 10000)}
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setAdjustingLimitUser({
+                              id: user.id,
+                              name: user.name,
+                              email: user.email,
+                              currentLimit: user.transferLimit ?? 10000,
+                            })
+                            setNewLimit((user.transferLimit ?? 10000).toString())
+                          }}
+                          className="text-xs h-7 gap-1"
+                        >
+                          <Sliders className="size-3" />
+                          Set Limit
+                        </Button>
+                        <span className="text-xs text-muted-foreground hidden lg:inline">
+                          Joined: {new Date(user.createdAt).toLocaleDateString()}
+                        </span>
                       </div>
                     </div>
 
@@ -1333,6 +1530,95 @@ export function AdminControls({
                   Verify &amp; Credit
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── TRANSFER LIMIT MODAL ── */}
+      {adjustingLimitUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <Card className="w-full max-w-md shadow-2xl border-border bg-card overflow-hidden my-auto">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Sliders className="size-4 text-primary" />
+                <CardTitle className="text-base">Customer Transfer Clearance Limit</CardTitle>
+              </div>
+              <CardDescription>
+                Set unique maximum transfer clearance limit for{" "}
+                <span className="font-semibold text-foreground">{adjustingLimitUser.name}</span> ({adjustingLimitUser.email})
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleUpdateLimitSubmit} className="space-y-4">
+                <div className="p-3 rounded-lg bg-muted/40 border border-border/60 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Current Clearance Limit:</span>
+                  <span className="font-mono font-bold text-foreground text-sm">
+                    {formatCurrency(adjustingLimitUser.currentLimit)}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold" htmlFor="newLimit">
+                    New Transfer Limit ($)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">
+                      $
+                    </span>
+                    <Input
+                      id="newLimit"
+                      type="text"
+                      className="pl-7 font-mono text-sm"
+                      placeholder="e.g. 25,000"
+                      value={newLimit}
+                      onChange={(e) => setNewLimit(formatAmountInput(e.target.value))}
+                      required
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Transfers exceeding this clearance limit will be blocked or held for administrative authorization.
+                  </p>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-muted-foreground">
+                    Quick Select Preset:
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[2500, 5000, 10000, 25000, 50000, 100000, 250000, 1000000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setNewLimit(preset.toLocaleString("en-US"))}
+                        className="py-1 px-1.5 text-[11px] font-medium rounded border border-border/80 bg-muted/30 hover:bg-muted text-foreground transition-colors truncate"
+                      >
+                        ${preset >= 1000000 ? `${preset / 1000000}M` : preset >= 1000 ? `${preset / 1000}k` : preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setAdjustingLimitUser(null)}
+                    disabled={limitLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={limitLoading || !newLimit.trim()}
+                    className="w-full font-semibold"
+                  >
+                    {limitLoading ? "Saving…" : "Update Limit"}
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>

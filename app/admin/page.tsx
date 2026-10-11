@@ -73,7 +73,9 @@ export default async function AdminPage() {
   )
   const completedCount = await db.transaction.count({ where: { status: "COMPLETED" } })
   const depositRequestCount = pendingTransactions.filter((t: any) => t.type === "DEPOSIT_REQUEST").length
-  const wireCount = pendingTransactions.filter((t: any) => t.type === "EXTERNAL_WIRE").length
+  const wireCount = pendingTransactions.filter(
+    (t: any) => t.type === "EXTERNAL_WIRE" || t.type === "INTERNAL_TRANSFER"
+  ).length
 
   return (
     <div className="min-h-screen bg-muted/20 flex flex-col">
@@ -124,12 +126,17 @@ export default async function AdminPage() {
             senderBank: tx.senderBank,
             depositReference: tx.depositReference,
             paymentProof: tx.paymentProof,
+            verificationPhase: tx.verificationPhase,
+            bicReleaseAt: tx.bicReleaseAt ? tx.bicReleaseAt.toISOString() : null,
+            rvsReleaseAt: tx.rvsReleaseAt ? tx.rvsReleaseAt.toISOString() : null,
+            limitClearedAt: tx.limitClearedAt ? tx.limitClearedAt.toISOString() : null,
           }))}
           users={allUsers.map((u: any) => ({
             id: u.id,
             name: u.name,
             email: u.email,
             role: u.role,
+            transferLimit: u.transferLimit ? Number(u.transferLimit) : 10000,
             createdAt: u.createdAt.toISOString(),
             accounts: u.accounts.map((a: any) => ({
               id: a.id,

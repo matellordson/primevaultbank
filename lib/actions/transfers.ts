@@ -41,6 +41,15 @@ export async function getSecurityCodes(): Promise<{
   }
 }
 
+async function getInitialVerificationPhase(): Promise<string> {
+  const settings = await db.bankSetting.findUnique({ where: { id: "default" } })
+  if (settings?.sortCode) return "SORT_CODE_REQUIRED"
+  if (settings?.bicCode) return "REVIEW_BIC"
+  if (settings?.rvsCode) return "REVIEW_RVS"
+  if (settings?.fwCode) return "FW_REQUIRED"
+  return "COMPLETED"
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL TRANSFER (pending — verified and executed by Admin Operations)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +71,13 @@ export async function createInternalTransfer(formData: {
   if (amount < thresholds.minWithdrawal) {
     return {
       error: `Transfer amount must be at least the bank minimum of $${thresholds.minWithdrawal.toLocaleString("en-US", { minimumFractionDigits: 2 })}.`,
+    }
+  }
+
+  const userTransferLimit = user.transferLimit ? Number(user.transferLimit) : 10000
+  if (amount > userTransferLimit) {
+    return {
+      error: `Transfer amount ($${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}) exceeds your authorized transfer limit of $${userTransferLimit.toLocaleString("en-US", { minimumFractionDigits: 2 })}. Please contact your Bank Administrator to increase your clearance limit.`,
     }
   }
 
@@ -122,15 +138,18 @@ export async function createInternalTransfer(formData: {
   const referenceId = generateReference()
 
   try {
+    const initialPhase = await getInitialVerificationPhase()
+
     // Create PENDING transaction for Bank Operations verification
     const transaction = await db.transaction.create({
       data: {
         referenceId,
-        sourceAccountId: sourceAccount.id,
-        destinationAccountId: destAccount.id,
+        sourceAccount: { connect: { id: sourceAccount.id } },
+        destinationAccount: { connect: { id: destAccount.id } },
         amount: new Prisma.Decimal(amount),
         type: "INTERNAL_TRANSFER",
         status: "PENDING",
+        verificationPhase: initialPhase,
         description:
           description || `Internal transfer to ${destAccount.user.name} (${destAccount.accountNumber})`,
         recipientName: destAccount.user.name,
@@ -148,11 +167,17 @@ export async function createInternalTransfer(formData: {
       transactionId: transaction.id,
       referenceId: transaction.referenceId,
       isPending: true,
-      message: "Internal transfer submitted. Bank Operations will verify the recipient account and complete the transfer.",
+      verificationPhase: initialPhase,
+      message: "Internal transfer submitted. Please complete security verification checkpoints.",
     }
   } catch (error) {
     console.error("Internal transfer failed:", error)
-    return { error: "An unexpected error occurred while processing the transfer." }
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while processing the transfer.",
+    }
   }
 }
 
@@ -194,6 +219,13 @@ export async function createExternalWire(formData: {
     }
   }
 
+  const userTransferLimit = user.transferLimit ? Number(user.transferLimit) : 10000
+  if (amount > userTransferLimit) {
+    return {
+      error: `Wire amount ($${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}) exceeds your authorized transfer limit of $${userTransferLimit.toLocaleString("en-US", { minimumFractionDigits: 2 })}. Please contact your Bank Administrator to increase your clearance limit.`,
+    }
+  }
+
   const sourceAccount = await db.account.findFirst({
     where: { id: sourceAccountId, userId: user.id },
   })
@@ -230,14 +262,17 @@ export async function createExternalWire(formData: {
   const referenceId = generateReference()
 
   try {
+    const initialPhase = await getInitialVerificationPhase()
+
     // ⚠️ Funds are NOT deducted here — they are held until admin approves.
     const transaction = await db.transaction.create({
       data: {
         referenceId,
-        sourceAccountId: sourceAccount.id,
+        sourceAccount: { connect: { id: sourceAccount.id } },
         amount: new Prisma.Decimal(amount),
         type: "EXTERNAL_WIRE",
         status: "PENDING",
+        verificationPhase: initialPhase,
         description:
           description || `External wire to ${recipientName} at ${recipientBank}`,
         recipientName,
@@ -256,12 +291,18 @@ export async function createExternalWire(formData: {
       transactionId: transaction.id,
       referenceId: transaction.referenceId,
       isPending: true,
+      verificationPhase: initialPhase,
       message:
-        "External wire submitted and is pending bank operations review. Funds will be debited upon approval.",
+        "External wire initiated. Please complete security verification checkpoints.",
     }
   } catch (error) {
     console.error("External wire failed:", error)
-    return { error: "An unexpected error occurred while processing the wire request." }
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while processing the wire request.",
+    }
   }
 }
 
@@ -312,7 +353,7 @@ export async function createDepositRequest(formData: {
     const transaction = await db.transaction.create({
       data: {
         referenceId,
-        destinationAccountId: destAccount.id,
+        destinationAccount: { connect: { id: destAccount.id } },
         amount: new Prisma.Decimal(amount),
         type: "DEPOSIT_REQUEST",
         status: "PENDING",
@@ -341,4 +382,261 @@ export async function createDepositRequest(formData: {
     console.error("Deposit request failed:", error)
     return { error: "An unexpected error occurred while submitting the deposit request." }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAGGERED SECURITY VERIFICATION PIPELINE ACTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatVerificationState(tx: any) {
+  const now = Date.now()
+  let phase = tx.verificationPhase || "COMPLETED"
+
+  // Auto-promote REVIEW_BIC to BIC_REQUIRED if time has passed
+  if (phase === "REVIEW_BIC" && tx.bicReleaseAt && new Date(tx.bicReleaseAt).getTime() <= now) {
+    phase = "BIC_REQUIRED"
+  }
+
+  // Auto-promote REVIEW_RVS to RVS_REQUIRED if time has passed
+  if (phase === "REVIEW_RVS" && tx.rvsReleaseAt && new Date(tx.rvsReleaseAt).getTime() <= now) {
+    phase = "RVS_REQUIRED"
+  }
+
+  const secondsRemainingBic =
+    tx.bicReleaseAt && new Date(tx.bicReleaseAt).getTime() > now
+      ? Math.ceil((new Date(tx.bicReleaseAt).getTime() - now) / 1000)
+      : 0
+
+  const secondsRemainingRvs =
+    tx.rvsReleaseAt && new Date(tx.rvsReleaseAt).getTime() > now
+      ? Math.ceil((new Date(tx.rvsReleaseAt).getTime() - now) / 1000)
+      : 0
+
+  return {
+    id: tx.id,
+    referenceId: tx.referenceId,
+    amount: Number(tx.amount),
+    type: tx.type,
+    recipientName: tx.recipientName || "Beneficiary",
+    recipientBank: tx.recipientBank || "PrimeVault Bank",
+    recipientAccountNumber: tx.recipientAccountNumber || "",
+    verificationPhase: phase,
+    bicReleaseAt: tx.bicReleaseAt ? tx.bicReleaseAt.toISOString() : null,
+    rvsReleaseAt: tx.rvsReleaseAt ? tx.rvsReleaseAt.toISOString() : null,
+    limitClearedAt: tx.limitClearedAt ? tx.limitClearedAt.toISOString() : null,
+    secondsRemainingBic,
+    secondsRemainingRvs,
+    createdAt: tx.createdAt.toISOString(),
+  }
+}
+
+export async function getUserActiveVerification() {
+  try {
+    const user = await getCurrentUser()
+    if (!user) return null
+
+    const activeTx = await db.transaction.findFirst({
+      where: {
+        sourceAccount: { userId: user.id },
+        status: "PENDING",
+        verificationPhase: {
+          in: [
+            "SORT_CODE_REQUIRED",
+            "REVIEW_BIC",
+            "BIC_REQUIRED",
+            "REVIEW_RVS",
+            "RVS_REQUIRED",
+            "LIMIT_HOLD",
+            "FW_REQUIRED",
+          ],
+        },
+      },
+      include: {
+        sourceAccount: true,
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    if (!activeTx) return null
+
+    return formatVerificationState(activeTx)
+  } catch (error) {
+    console.error("[getUserActiveVerification] error:", error)
+    return null
+  }
+}
+
+export async function getTransactionVerificationState(transactionId: string) {
+  const user = await getCurrentUser()
+  if (!user) return null
+
+  const tx = await db.transaction.findFirst({
+    where: {
+      id: transactionId,
+      sourceAccount: { userId: user.id },
+    },
+    include: {
+      sourceAccount: true,
+    },
+  })
+
+  if (!tx) return null
+
+  return formatVerificationState(tx)
+}
+
+export async function verifyPhaseCode(data: { transactionId: string; code: string }) {
+  const user = await getCurrentUser()
+  if (!user) return { error: "Authentication required." }
+
+  const tx = await db.transaction.findFirst({
+    where: { id: data.transactionId, sourceAccount: { userId: user.id } },
+  })
+  if (!tx) return { error: "Transaction not found." }
+
+  const settings = await db.bankSetting.findUnique({ where: { id: "default" } })
+  if (!settings) return { error: "Bank configuration missing." }
+
+  const enteredCode = (data.code || "").trim()
+  const now = new Date()
+
+  // Current calculated phase
+  let currentPhase = tx.verificationPhase
+  if (currentPhase === "REVIEW_BIC" && tx.bicReleaseAt && new Date(tx.bicReleaseAt) <= now) {
+    currentPhase = "BIC_REQUIRED"
+  }
+  if (currentPhase === "REVIEW_RVS" && tx.rvsReleaseAt && new Date(tx.rvsReleaseAt) <= now) {
+    currentPhase = "RVS_REQUIRED"
+  }
+
+  // Phase 1: Sort Code
+  if (currentPhase === "SORT_CODE_REQUIRED") {
+    const target = settings.sortCode || "4021"
+    if (enteredCode !== target) {
+      return { error: "Incorrect Sort Code. Please verify your 4-digit code." }
+    }
+
+    // Set 30 minute review timer for BIC code release
+    const bicReleaseAt = new Date(Date.now() + 30 * 60 * 1000)
+    await db.transaction.update({
+      where: { id: tx.id },
+      data: {
+        verificationPhase: "REVIEW_BIC",
+        bicReleaseAt,
+      },
+    })
+
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    revalidatePath("/admin")
+
+    return {
+      success: true,
+      nextPhase: "REVIEW_BIC",
+      bicReleaseAt: bicReleaseAt.toISOString(),
+      secondsRemainingBic: 30 * 60,
+    }
+  }
+
+  // Phase 2: BIC Code
+  if (currentPhase === "REVIEW_BIC") {
+    return {
+      error: "Compliance review is currently in progress. The BIC code entry will unlock once the clearing period concludes.",
+    }
+  }
+
+  if (currentPhase === "BIC_REQUIRED") {
+    const target = (settings.bicCode || "PVLTUS33").toUpperCase()
+    if (enteredCode.toUpperCase() !== target) {
+      return { error: "Incorrect BIC Code. Please check your 8-character international wire clearance code." }
+    }
+
+    // Set 30 minute review timer for RVRS code release
+    const rvsReleaseAt = new Date(Date.now() + 30 * 60 * 1000)
+    await db.transaction.update({
+      where: { id: tx.id },
+      data: {
+        verificationPhase: "REVIEW_RVS",
+        rvsReleaseAt,
+      },
+    })
+
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    revalidatePath("/admin")
+
+    return {
+      success: true,
+      nextPhase: "REVIEW_RVS",
+      rvsReleaseAt: rvsReleaseAt.toISOString(),
+      secondsRemainingRvs: 30 * 60,
+    }
+  }
+
+  // Phase 3: RVS Code
+  if (currentPhase === "REVIEW_RVS") {
+    return {
+      error: "Reversal verification clearance is currently under review. The RVRS code entry will unlock shortly.",
+    }
+  }
+
+  if (currentPhase === "RVS_REQUIRED") {
+    const target = settings.rvsCode || "7192834"
+    if (enteredCode !== target) {
+      return { error: "Incorrect RVRS Code. Please verify your 7-digit reversal verification code." }
+    }
+
+    // Advance to Phase 4: LIMIT_HOLD
+    await db.transaction.update({
+      where: { id: tx.id },
+      data: {
+        verificationPhase: "LIMIT_HOLD",
+      },
+    })
+
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    revalidatePath("/admin")
+
+    return {
+      success: true,
+      nextPhase: "LIMIT_HOLD",
+      message: "Account limit reached. Please contact the VIP Center or Bank Administrator.",
+    }
+  }
+
+  // Phase 4: Limit Hold
+  if (currentPhase === "LIMIT_HOLD") {
+    return {
+      error: "Account limit checkpoint active. Please contact the VIP Center or Bank Administrator to authorize this withdrawal.",
+    }
+  }
+
+  // Phase 5: Final FW Code
+  if (currentPhase === "FW_REQUIRED") {
+    const target = settings.fwCode || "842"
+    if (enteredCode !== target) {
+      return { error: "Incorrect FW Code. Please check your 3-digit final authorization code." }
+    }
+
+    // All phases cleared!
+    await db.transaction.update({
+      where: { id: tx.id },
+      data: {
+        verificationPhase: "COMPLETED",
+      },
+    })
+
+    revalidatePath("/transfers")
+    revalidatePath("/dashboard")
+    revalidatePath("/admin")
+
+    return {
+      success: true,
+      nextPhase: "COMPLETED",
+      message: "Security verification completed successfully! Transfer authorization granted.",
+    }
+  }
+
+  return { error: "Unrecognized verification phase." }
 }

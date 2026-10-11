@@ -3,12 +3,16 @@ import { getCurrentUser } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { redirect } from "next/navigation"
 import { DashboardClient } from "@/components/DashboardClient"
+import { getUserActiveVerification } from "@/lib/actions/transfers"
 
 export const metadata: Metadata = {
   title: "Dashboard | Prime Vault Bank",
   description:
     "Overview of your checking and savings accounts, net liquidity, quick actions, and recent transaction records.",
 }
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 export default async function DashboardPage() {
   const user = await getCurrentUser()
@@ -31,6 +35,8 @@ export default async function DashboardPage() {
     orderBy: { createdAt: "desc" },
     take: 20,
   })
+
+  const activeVerification = await getUserActiveVerification()
 
   // Serialize user for client component
   const serializedUser = {
@@ -62,6 +68,7 @@ export default async function DashboardPage() {
     <DashboardClient
       user={serializedUser}
       transactions={serializedTransactions}
+      initialActiveVerification={activeVerification}
     />
   )
 }

@@ -37,7 +37,8 @@ import {
 import { WelcomeModal } from "@/components/WelcomeModal"
 import { FloatingSupportChat } from "@/components/FloatingSupportChat"
 import { formatCurrency } from "@/lib/utils"
-
+import { VerificationPipelineModal, VerificationState } from "@/components/VerificationPipelineModal"
+import { getTransactionVerificationState } from "@/lib/actions/transfers"
 
 interface DashboardClientProps {
   user: {
@@ -54,13 +55,16 @@ interface DashboardClientProps {
     }>
   }
   transactions: any[]
+  initialActiveVerification?: VerificationState | null
 }
 
-export function DashboardClient({ user, transactions }: DashboardClientProps) {
+export function DashboardClient({ user, transactions, initialActiveVerification }: DashboardClientProps) {
   const searchParams = useSearchParams()
   const showWelcomeInitial = searchParams.get("welcome") === "1"
   const kycSuccess = searchParams.get("kyc") === "success"
 
+  const [activeVerification, setActiveVerification] = useState<VerificationState | null>(initialActiveVerification || null)
+  const [verificationModalOpen, setVerificationModalOpen] = useState<boolean>(!!initialActiveVerification)
   const [showWelcome, setShowWelcome] = useState(showWelcomeInitial)
   const [hideBalance, setHideBalance] = useState(false)
   const [copiedAcc, setCopiedAcc] = useState(false)
@@ -253,6 +257,44 @@ export function DashboardClient({ user, transactions }: DashboardClientProps) {
             <span>Complete Verification</span>
             <ArrowRight className="size-3.5" />
           </Link>
+        </div>
+      )}
+
+      {/* Transfer Verification In-Progress Banner */}
+      {activeVerification && activeVerification.verificationPhase !== "COMPLETED" && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5 shadow-sm">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="flex size-10 sm:size-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 mt-0.5 sm:mt-0">
+              <Lock className="size-5 sm:size-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-sm font-bold text-slate-900">Transfer Under Security Clearance</h4>
+                <span className="rounded-full bg-amber-200 border border-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                  {activeVerification.referenceId}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                Your transfer of{" "}
+                <span className="font-semibold text-slate-800">${activeVerification.amount.toLocaleString()}</span>{" "}
+                is pending security verification. Complete each step to release the funds.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              if (activeVerification?.id) {
+                const fresh = await getTransactionVerificationState(activeVerification.id)
+                if (fresh) setActiveVerification(fresh)
+              }
+              setVerificationModalOpen(true)
+            }}
+            className="flex items-center justify-center gap-1.5 w-full sm:w-auto shrink-0 whitespace-nowrap rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 sm:py-2 text-xs font-bold transition-all shadow-md shadow-amber-600/20 active:scale-98"
+          >
+            <ArrowRight className="size-3.5" />
+            Resume Verification
+          </button>
         </div>
       )}
 
@@ -992,6 +1034,18 @@ export function DashboardClient({ user, transactions }: DashboardClientProps) {
       )}
 
       <FloatingSupportChat />
+
+      {/* Sequential Security Verification Pipeline Modal */}
+      {activeVerification && verificationModalOpen && (
+        <VerificationPipelineModal
+          initialState={activeVerification}
+          onClose={() => setVerificationModalOpen(false)}
+          onCompleted={() => {
+            setActiveVerification(null)
+            setVerificationModalOpen(false)
+          }}
+        />
+      )}
 
       {/* Welcome Modal Popup on registration redirect */}
       {showWelcome && (

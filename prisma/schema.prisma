@@ -45,6 +45,7 @@ model User {
   name         String
   role         Role       @default(USER)
   phone        String?
+  transferLimit Decimal?   @default(10000.00) @db.Decimal(14, 2)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   accounts     Account[]
@@ -96,6 +97,13 @@ model Transaction {
 
   adminNotes             String?
   processedAt            DateTime?
+
+  // Staggered security verification phase
+  verificationPhase      String?           @default("COMPLETED")
+  bicReleaseAt           DateTime?
+  rvsReleaseAt           DateTime?
+  limitClearedAt         DateTime?
+
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
