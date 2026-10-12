@@ -204,10 +204,19 @@ export function VerificationPipelineModal({
     setLoading(true)
 
     try {
-      const res = await verifyPhaseCode({
+      let res = await verifyPhaseCode({
         transactionId: txState.id,
         code: inputCode,
       })
+
+      // Auto-retry once on transient session/not-found errors
+      if (
+        res.error &&
+        (res.error.includes("session") || res.error.includes("not found") || res.error.includes("refresh"))
+      ) {
+        await new Promise((r) => setTimeout(r, 800))
+        res = await verifyPhaseCode({ transactionId: txState.id, code: inputCode })
+      }
 
       setLoading(false)
 
@@ -217,8 +226,14 @@ export function VerificationPipelineModal({
       }
 
       if (res.success && res.nextPhase) {
-        // Refresh state
-        const fresh = await getTransactionVerificationState(txState.id)
+        // Refresh state — retry up to 3 times with backoff for transient DB delays
+        let fresh = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          fresh = await getTransactionVerificationState(txState.id)
+          if (fresh) break
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+        }
+
         if (fresh) {
           setTxState(fresh)
           setSecondsBic(fresh.secondsRemainingBic)
@@ -254,30 +269,6 @@ export function VerificationPipelineModal({
     setLoading(false)
   }
 
-  // Determine current step index (1 to 5)
-  const getStepNumber = () => {
-    switch (txState.verificationPhase) {
-      case "SORT_CODE_REQUIRED":
-        return 1
-      case "REVIEW_BIC":
-      case "BIC_REQUIRED":
-        return 2
-      case "REVIEW_RVS":
-      case "RVS_REQUIRED":
-        return 3
-      case "LIMIT_HOLD":
-        return 4
-      case "FW_REQUIRED":
-        return 5
-      case "COMPLETED":
-        return 5
-      default:
-        return 1
-    }
-  }
-
-  const currentStep = getStepNumber()
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4 animate-in fade-in duration-300">
       <div className="relative w-full max-w-lg rounded-2xl border border-border/90 bg-card p-5 sm:p-7 text-card-foreground shadow-2xl space-y-5">
@@ -300,32 +291,6 @@ export function VerificationPipelineModal({
               <X className="size-4" />
             </button>
           )}
-        </div>
-
-        {/* Step Progress Dots */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            <span>Security Clearance Pipeline</span>
-            <span>Step {currentStep} of 5</span>
-          </div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {[1, 2, 3, 4, 5].map((step) => {
-              const isPast = step < currentStep
-              const isCurrent = step === currentStep
-              return (
-                <div
-                  key={step}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    isPast
-                      ? "bg-emerald-500"
-                      : isCurrent
-                      ? "bg-primary animate-pulse"
-                      : "bg-muted"
-                  }`}
-                />
-              )
-            })}
-          </div>
         </div>
 
         {/* Error notification */}

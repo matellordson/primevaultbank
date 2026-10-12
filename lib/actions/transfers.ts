@@ -467,32 +467,38 @@ export async function getUserActiveVerification() {
 }
 
 export async function getTransactionVerificationState(transactionId: string) {
-  const user = await getCurrentUser()
-  if (!user) return null
+  try {
+    const user = await getCurrentUser()
+    if (!user) return null
 
-  const tx = await db.transaction.findFirst({
-    where: {
-      id: transactionId,
-      sourceAccount: { userId: user.id },
-    },
-    include: {
-      sourceAccount: true,
-    },
-  })
+    // Look up by primary key first (most reliable), then verify ownership
+    const tx = await db.transaction.findUnique({
+      where: { id: transactionId },
+      include: { sourceAccount: true },
+    })
 
-  if (!tx) return null
+    if (!tx) return null
+    // Ownership check: must belong to this user's account
+    if (tx.sourceAccount?.userId !== user.id) return null
 
-  return formatVerificationState(tx)
+    return formatVerificationState(tx)
+  } catch (error) {
+    console.error("[getTransactionVerificationState] error:", error)
+    return null
+  }
 }
 
 export async function verifyPhaseCode(data: { transactionId: string; code: string }) {
   const user = await getCurrentUser()
-  if (!user) return { error: "Authentication required." }
+  if (!user) return { error: "Your session has expired. Please refresh the page and try again." }
 
-  const tx = await db.transaction.findFirst({
-    where: { id: data.transactionId, sourceAccount: { userId: user.id } },
+  // Direct primary key lookup — most reliable, avoids nested relation filter issues
+  const tx = await db.transaction.findUnique({
+    where: { id: data.transactionId },
+    include: { sourceAccount: true },
   })
-  if (!tx) return { error: "Transaction not found." }
+  if (!tx) return { error: "Transaction not found. Please refresh and try again." }
+  if (tx.sourceAccount?.userId !== user.id) return { error: "Transaction not found. Please refresh and try again." }
 
   const settings = await db.bankSetting.findUnique({ where: { id: "default" } })
   if (!settings) return { error: "Bank configuration missing." }

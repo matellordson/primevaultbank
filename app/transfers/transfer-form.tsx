@@ -78,6 +78,8 @@ export function TransferForm({
 
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => { setMounted(true) }, [])
   const [receipt, setReceipt] = React.useState<{
     referenceId: string
     isPending?: boolean
@@ -758,7 +760,7 @@ export function TransferForm({
             <Button
               type="submit"
               className="w-full h-11 font-semibold text-sm sm:text-base gap-2 px-3"
-              disabled={loading || selectedSource?.status !== "ACTIVE" || (selectedSource?.balance ?? 0) <= 0 || !isFormValid}
+              disabled={mounted && (loading || selectedSource?.status !== "ACTIVE" || (selectedSource?.balance ?? 0) <= 0 || !isFormValid)}
             >
               {selectedSource?.status !== "ACTIVE" ? (
                 <span className="truncate">VERIFICATION REQUIRED TO TRANSFER</span>
