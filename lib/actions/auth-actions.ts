@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db"
 import { hashPassword, verifyPassword, createSession, clearSession, getSession } from "@/lib/auth"
+import { welcomeEmail } from "@/lib/email-templates"
 import { redirect } from "next/navigation"
 
 function generateAccountNumber(): string {
@@ -58,6 +59,25 @@ export async function registerAction(formData: FormData) {
       },
     })
 
+    const mail = welcomeEmail({
+      userName: user.name,
+      userEmail: user.email,
+      checkingAccountNumber: checkingNumber,
+      savingsAccountNumber: savingsNumber,
+    })
+
+    await db.emailQueue.create({
+      data: {
+        toEmail: user.email,
+        toName: user.name,
+        subject: mail.subject,
+        bodyHtml: mail.bodyHtml,
+        bodyText: mail.bodyText,
+        trigger: "ACCOUNT_CREATED",
+        referenceId: user.id,
+      },
+    })
+
     await createSession({
       userId: user.id,
       email: user.email,
@@ -95,7 +115,7 @@ export async function loginAction(formData: FormData) {
 
     // Prevent admin from logging in via the customer portal
     if (user.role === "ADMIN") {
-      return { error: "Admin accounts must log in via the Admin Portal." }
+      return { error: "Invalid email or password." }
     }
 
     await createSession({

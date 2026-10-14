@@ -66,6 +66,19 @@ export default async function AdminPage() {
     take: 30,
   })
 
+  // Emails queue (manual mailing system)
+  const [unsentEmails, sentEmails] = await Promise.all([
+    db.emailQueue.findMany({
+      where: { sentAt: null },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.emailQueue.findMany({
+      where: { sentAt: { not: null } },
+      orderBy: { sentAt: "desc" },
+      take: 50,
+    }),
+  ])
+
   const totalAccounts = allUsers.reduce((sum: number, u: any) => sum + u.accounts.length, 0)
   const totalLiquidity = allUsers.reduce(
     (sum: number, u: any) => sum + u.accounts.reduce((aSum: number, a: any) => aSum + Number(a.balance), 0),
@@ -106,6 +119,33 @@ export default async function AdminPage() {
             wireCount,
             totalLiquidity,
             completedCount,
+            unsentEmailCount: unsentEmails.length,
+          }}
+          emails={{
+            unsent: unsentEmails.map((e) => ({
+              id: e.id,
+              toEmail: e.toEmail,
+              toName: e.toName,
+              subject: e.subject,
+              bodyHtml: e.bodyHtml,
+              bodyText: e.bodyText,
+              trigger: e.trigger,
+              referenceId: e.referenceId,
+              sentAt: e.sentAt ? e.sentAt.toISOString() : null,
+              createdAt: e.createdAt.toISOString(),
+            })),
+            sent: sentEmails.map((e) => ({
+              id: e.id,
+              toEmail: e.toEmail,
+              toName: e.toName,
+              subject: e.subject,
+              bodyHtml: e.bodyHtml,
+              bodyText: e.bodyText,
+              trigger: e.trigger,
+              referenceId: e.referenceId,
+              sentAt: e.sentAt ? e.sentAt.toISOString() : null,
+              createdAt: e.createdAt.toISOString(),
+            })),
           }}
           pendingTransactions={pendingTransactions.map((tx: any) => ({
             id: tx.id,

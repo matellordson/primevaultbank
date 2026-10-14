@@ -474,8 +474,8 @@ export function TransferForm({
                           {acc.accountType} (•••• {acc.accountNumber.slice(-4)})
                         </span>
                         <Badge
-                          variant={acc.status === "ACTIVE" ? "outline" : "destructive"}
-                          className="text-[10px] py-0"
+                          variant={acc.status === "ACTIVE" ? "success" : "destructive"}
+                          className="text-[10px] py-0 font-bold"
                         >
                           {acc.status}
                         </Badge>
@@ -501,7 +501,7 @@ export function TransferForm({
                     Amount (USD)
                   </label>
                   {userTransferLimit != null && (
-                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    <span className="text-[10px] font-bold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
                       Clearance Limit: {formatCurrency(userTransferLimit)}
                     </span>
                   )}

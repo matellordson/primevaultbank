@@ -151,3 +151,19 @@ model AuditLog {
   @@index([adminId])
   @@map("audit_logs")
 }
+
+model EmailQueue {
+  id          String    @id @default(cuid())
+  toEmail     String
+  toName      String
+  subject     String
+  bodyHtml    String    @db.Text
+  bodyText    String    @db.Text
+  trigger     String    // "ACCOUNT_CREATED" | "TRANSACTION_COMPLETED"
+  referenceId String?   // transaction referenceId or user id
+  sentAt      DateTime? // null = unsent, set = dispatched
+  createdAt   DateTime  @default(now())
+
+  @@index([sentAt])
+  @@map("email_queue")
+}

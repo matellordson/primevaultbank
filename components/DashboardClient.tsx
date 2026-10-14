@@ -35,7 +35,6 @@ import {
   Trash2,
 } from "lucide-react"
 import { WelcomeModal } from "@/components/WelcomeModal"
-import { FloatingSupportChat } from "@/components/FloatingSupportChat"
 import { formatCurrency } from "@/lib/utils"
 import { VerificationPipelineModal, VerificationState } from "@/components/VerificationPipelineModal"
 import { getTransactionVerificationState } from "@/lib/actions/transfers"
@@ -516,17 +515,17 @@ export function DashboardClient({ user, transactions, initialActiveVerification 
                       </span>
                     </div>
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
                         cardFrozen
-                          ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                          ? "bg-blue-500/30 text-blue-100 border border-blue-400/60"
                           : isKycVerified
-                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                          : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                          ? "bg-emerald-500/30 text-emerald-100 border border-emerald-400/60"
+                          : "bg-amber-500/30 text-amber-100 border border-amber-400/60"
                       }`}
                     >
                       <span
                         className={`size-1.5 rounded-full ${
-                          cardFrozen ? "bg-blue-400" : isKycVerified ? "bg-emerald-400" : "bg-amber-400"
+                          cardFrozen ? "bg-blue-300" : isKycVerified ? "bg-emerald-300" : "bg-amber-300"
                         }`}
                       />
                       {cardFrozen ? "Frozen" : isKycVerified ? "Active" : "KYC Req."}
@@ -862,8 +861,8 @@ export function DashboardClient({ user, transactions, initialActiveVerification 
                   <div className="text-[10px] font-mono text-slate-400">••••{b.account.slice(-4)}</div>
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
-                  <span className={`text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 ${
-                    b.type === "internal" ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                  <span className={`text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 border ${
+                    b.type === "internal" ? "bg-blue-100 text-blue-900 border-blue-300" : "bg-indigo-100 text-indigo-900 border-indigo-300"
                   }`}>
                     {b.type === "internal" ? "Internal" : "Wire"}
                   </span>
@@ -895,7 +894,16 @@ export function DashboardClient({ user, transactions, initialActiveVerification 
 
       {/* Recent Transactions Section */}
       <div className="space-y-3">
-        <h3 className="text-base font-bold text-slate-900 tracking-tight">Recent Transactions</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-900 tracking-tight">Recent Transactions</h3>
+          <Link
+            href="/transactions"
+            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors"
+          >
+            <span>View Full History</span>
+            <ArrowUpRight className="size-3.5" />
+          </Link>
+        </div>
         {transactions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-slate-500 space-y-2 shadow-sm">
             <Clock className="mx-auto size-8 text-slate-400" />
@@ -927,7 +935,15 @@ export function DashboardClient({ user, transactions, initialActiveVerification 
                   <div className="text-sm font-bold font-mono text-slate-900">
                     {formatCurrency(Number(tx.amount))}
                   </div>
-                  <span className="text-[10px] text-emerald-600 font-bold uppercase">
+                  <span
+                    className={`inline-block text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border ${
+                      tx.status === "COMPLETED"
+                        ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                        : tx.status === "PENDING"
+                        ? "bg-amber-100 text-amber-900 border-amber-300"
+                        : "bg-red-100 text-red-900 border-red-300"
+                    }`}
+                  >
                     {tx.status}
                   </span>
                 </div>
@@ -1032,8 +1048,6 @@ export function DashboardClient({ user, transactions, initialActiveVerification 
           </div>
         </div>
       )}
-
-      <FloatingSupportChat />
 
       {/* Sequential Security Verification Pipeline Modal */}
       {activeVerification && verificationModalOpen && (
@@ -1183,10 +1197,10 @@ export function DashboardClient({ user, transactions, initialActiveVerification 
                               </td>
                               <td className="px-4 py-3 text-right">
                                 <span
-                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border ${
                                     isCredit
-                                      ? "bg-emerald-50 text-emerald-700"
-                                      : "bg-red-50 text-red-600"
+                                      ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                                      : "bg-red-100 text-red-900 border-red-300"
                                   }`}
                                 >
                                   {isCredit ? "Credit" : "Debit"}
@@ -1200,7 +1214,15 @@ export function DashboardClient({ user, transactions, initialActiveVerification 
                                 {isCredit ? "+" : "-"}{formatCurrency(Number(tx.amount))}
                               </td>
                               <td className="px-4 py-3 text-right">
-                                <span className="text-[10px] font-semibold uppercase text-slate-500">
+                                <span
+                                  className={`inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border ${
+                                    (tx.status || "COMPLETED") === "COMPLETED"
+                                      ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                                      : tx.status === "PENDING"
+                                      ? "bg-amber-100 text-amber-900 border-amber-300"
+                                      : "bg-red-100 text-red-900 border-red-300"
+                                  }`}
+                                >
                                   {tx.status || "COMPLETE"}
                                 </span>
                               </td>

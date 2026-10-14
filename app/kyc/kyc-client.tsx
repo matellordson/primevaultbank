@@ -29,7 +29,6 @@ import {
   ImageIcon,
 } from "lucide-react"
 import { completeKycAction } from "@/lib/actions/auth-actions"
-import { FloatingSupportChat } from "@/components/FloatingSupportChat"
 
 interface KycClientProps {
   user: {
@@ -853,8 +852,6 @@ export function KycClient({ user, isVerified: initialVerified }: KycClientProps)
           </div>
         )}
       </main>
-
-      <FloatingSupportChat />
 
       {/* ============================================================== */}
       {/* MODAL 1: REAL DOCUMENT UPLOAD WITH LIVE PREVIEW & OCR SCAN     */}

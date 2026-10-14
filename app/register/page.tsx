@@ -19,7 +19,6 @@ import {
   Building,
 } from "lucide-react"
 import { registerAction } from "@/lib/actions/auth-actions"
-import { FloatingSupportChat } from "@/components/FloatingSupportChat"
 
 const COUNTRIES = [
   { code: "US", name: "United States", flag: "🇺🇸", dial: "+1", currency: "USD" },
@@ -479,8 +478,6 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
-
-      <FloatingSupportChat />
     </div>
   )
 }

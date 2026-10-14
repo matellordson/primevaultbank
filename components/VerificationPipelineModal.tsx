@@ -227,7 +227,7 @@ export function VerificationPipelineModal({
 
       if (res.success && res.nextPhase) {
         // Refresh state — retry up to 3 times with backoff for transient DB delays
-        let fresh = null
+        let fresh: Awaited<ReturnType<typeof getTransactionVerificationState>> = null
         for (let attempt = 0; attempt < 3; attempt++) {
           fresh = await getTransactionVerificationState(txState.id)
           if (fresh) break

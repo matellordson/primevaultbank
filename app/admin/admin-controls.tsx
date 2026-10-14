@@ -12,6 +12,7 @@ import {
   adminClearLimitHold,
   updateUserTransferLimit,
 } from "@/lib/actions/admin"
+import { markEmailSent } from "@/lib/actions/email-actions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,6 +45,12 @@ import {
   ShieldCheck,
   Zap,
   Sliders,
+  Mail,
+  Copy,
+  Check,
+  ExternalLink,
+  Inbox,
+  Archive,
 } from "lucide-react"
 import { formatCurrency, formatAmountInput, parseAmount } from "@/lib/utils"
 
@@ -78,6 +85,19 @@ interface PendingTx {
   limitClearedAt?: string | null
 }
 
+export interface EmailQueueItemUI {
+  id: string
+  toEmail: string
+  toName: string
+  subject: string
+  bodyHtml: string
+  bodyText: string
+  trigger: string
+  referenceId?: string | null
+  sentAt?: string | null
+  createdAt: string
+}
+
 interface AdminControlsProps {
   stats: {
     totalUsers: number
@@ -87,6 +107,11 @@ interface AdminControlsProps {
     wireCount: number
     totalLiquidity: number
     completedCount: number
+    unsentEmailCount?: number
+  }
+  emails?: {
+    unsent: EmailQueueItemUI[]
+    sent: EmailQueueItemUI[]
   }
   pendingTransactions: PendingTx[]
   users: {
@@ -129,10 +154,11 @@ interface AdminControlsProps {
   }
 }
 
-type Tab = "PENDING" | "CUSTOMERS" | "AUDIT" | "SETTINGS"
+type Tab = "PENDING" | "EMAILS" | "CUSTOMERS" | "AUDIT" | "SETTINGS"
 
 export function AdminControls({
   stats,
+  emails,
   pendingTransactions,
   users,
   auditLogs,
@@ -141,6 +167,68 @@ export function AdminControls({
   const [activeTab, setActiveTab] = React.useState<Tab>("PENDING")
   const [processingId, setProcessingId] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<{ text: string; type: "success" | "error" } | null>(null)
+
+  // Manual email mailing system state
+  const [emailList, setEmailList] = React.useState<{
+    unsent: EmailQueueItemUI[]
+    sent: EmailQueueItemUI[]
+  }>({
+    unsent: emails?.unsent ?? [],
+    sent: emails?.sent ?? [],
+  })
+  const [selectedEmail, setSelectedEmail] = React.useState<EmailQueueItemUI | null>(null)
+  const [copyFeedback, setCopyFeedback] = React.useState<string | null>(null)
+  const [markingSentId, setMarkingSentId] = React.useState<string | null>(null)
+  const [emailTabMode, setEmailTabMode] = React.useState<"UNSENT" | "SENT">("UNSENT")
+  const [emailBodyFormat, setEmailBodyFormat] = React.useState<"text" | "html">("text")
+
+  React.useEffect(() => {
+    if (emails) {
+      setEmailList({
+        unsent: emails.unsent ?? [],
+        sent: emails.sent ?? [],
+      })
+    }
+  }, [emails])
+
+  function copyToClipboard(text: string, fieldName: string) {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text)
+    } else {
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textarea)
+    }
+    setCopyFeedback(fieldName)
+    setTimeout(() => {
+      setCopyFeedback((curr) => (curr === fieldName ? null : curr))
+    }, 2500)
+  }
+
+  async function handleMarkEmailSent(email: EmailQueueItemUI) {
+    setMarkingSentId(email.id)
+    const res = await markEmailSent(email.id)
+    setMarkingSentId(null)
+    if (res.error) {
+      showMessage(res.error, "error")
+    } else {
+      const updatedSentItem: EmailQueueItemUI = {
+        ...email,
+        sentAt: new Date().toISOString(),
+      }
+      setEmailList((prev) => ({
+        unsent: prev.unsent.filter((e) => e.id !== email.id),
+        sent: [updatedSentItem, ...prev.sent],
+      }))
+      if (selectedEmail?.id === email.id) {
+        setSelectedEmail(updatedSentItem)
+      }
+      showMessage(`Email marked as sent to ${email.toEmail}.`, "success")
+    }
+  }
 
   // Balance adjustment modal
   const [adjustingAccount, setAdjustingAccount] = React.useState<{
@@ -302,21 +390,28 @@ export function AdminControls({
 
   function getPhaseLabel(phase?: string | null) {
     switch (phase) {
-      case "SORT_CODE_REQUIRED": return { label: "Phase 1: Sort Code", color: "bg-violet-100 text-violet-800 border-violet-200" }
-      case "REVIEW_BIC": return { label: "Phase 2: BIC Review", color: "bg-amber-100 text-amber-800 border-amber-200" }
-      case "BIC_REQUIRED": return { label: "Phase 2: BIC Code", color: "bg-blue-100 text-blue-800 border-blue-200" }
-      case "REVIEW_RVS": return { label: "Phase 3: RVRS Review", color: "bg-amber-100 text-amber-800 border-amber-200" }
-      case "RVS_REQUIRED": return { label: "Phase 3: RVRS Code", color: "bg-cyan-100 text-cyan-800 border-cyan-200" }
-      case "LIMIT_HOLD": return { label: "Phase 4: Limit Hold", color: "bg-rose-100 text-rose-800 border-rose-200" }
-      case "FW_REQUIRED": return { label: "Phase 5: Final Code", color: "bg-orange-100 text-orange-800 border-orange-200" }
-      case "COMPLETED": return { label: "Verified", color: "bg-emerald-100 text-emerald-800 border-emerald-200" }
+      case "SORT_CODE_REQUIRED": return { label: "Phase 1: Sort Code", color: "bg-violet-100 text-violet-900 border-violet-300 font-bold" }
+      case "REVIEW_BIC": return { label: "Phase 2: BIC Review", color: "bg-amber-100 text-amber-900 border-amber-300 font-bold" }
+      case "BIC_REQUIRED": return { label: "Phase 2: BIC Code", color: "bg-blue-100 text-blue-900 border-blue-300 font-bold" }
+      case "REVIEW_RVS": return { label: "Phase 3: RVRS Review", color: "bg-amber-100 text-amber-900 border-amber-300 font-bold" }
+      case "RVS_REQUIRED": return { label: "Phase 3: RVRS Code", color: "bg-cyan-100 text-cyan-900 border-cyan-300 font-bold" }
+      case "LIMIT_HOLD": return { label: "Phase 4: Limit Hold", color: "bg-rose-100 text-rose-900 border-rose-300 font-bold" }
+      case "FW_REQUIRED": return { label: "Phase 5: Final Code", color: "bg-orange-100 text-orange-900 border-orange-300 font-bold" }
+      case "COMPLETED": return { label: "Verified", color: "bg-emerald-100 text-emerald-900 border-emerald-300 font-bold" }
       default: return null
     }
   }
 
 
-  const tabs: { id: Tab; label: string; icon: React.ElementType; badge?: number }[] = [
+  const tabs: { id: Tab; label: string; icon: React.ElementType; badge?: number; badgeColor?: string }[] = [
     { id: "PENDING", label: "Transfer Queue", icon: SendHorizonal, badge: stats.wireCount },
+    {
+      id: "EMAILS",
+      label: "Email Desk",
+      icon: Mail,
+      badge: emailList.unsent.length,
+      badgeColor: "bg-rose-100 text-rose-900 border border-rose-300",
+    },
     { id: "CUSTOMERS", label: "Customers", icon: Users },
     { id: "AUDIT", label: "Audit Trail", icon: Activity },
     { id: "SETTINGS", label: "Bank Settings", icon: Settings },
@@ -343,10 +438,11 @@ export function AdminControls({
       )}
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
           { label: "Pending Wires", value: stats.wireCount, icon: Clock, color: "text-amber-500" },
           { label: "Pending Deposits", value: stats.depositRequestCount, icon: Download, color: "text-blue-500" },
+          { label: "Unsent Emails", value: emailList.unsent.length, icon: Mail, color: "text-rose-500" },
           { label: "Customers", value: stats.totalUsers, icon: Users, color: "text-primary" },
           {
             label: "System Liquidity",
@@ -380,7 +476,7 @@ export function AdminControls({
 
       {/* Tabs */}
       <div className="flex border-b border-border/80 gap-1 overflow-x-auto">
-        {tabs.map(({ id, label, icon: Icon, badge }) => (
+        {tabs.map(({ id, label, icon: Icon, badge, badgeColor }) => (
           <button
             key={id}
             type="button"
@@ -394,7 +490,7 @@ export function AdminControls({
             <Icon className="size-4" />
             {label}
             {badge != null && badge > 0 && (
-              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold text-white">
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${badgeColor || "bg-amber-100 text-amber-900 border border-amber-300"}`}>
                 {badge}
               </span>
             )}
@@ -806,6 +902,243 @@ export function AdminControls({
         </div>
       )}
 
+      {/* ── TAB: EMAIL DESK (MANUAL MAILING SYSTEM) ── */}
+      {activeTab === "EMAILS" && (
+        <div className="space-y-6">
+          <Card className="shadow-sm border-border/80">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Mail className="size-5 text-rose-500" />
+                    <CardTitle className="text-base font-bold">Manual Email Dispatch Desk</CardTitle>
+                    {emailList.unsent.length > 0 && (
+                      <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-bold text-white">
+                        {emailList.unsent.length} pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sub-view switcher */}
+                <div className="flex items-center gap-1.5 p-1 rounded-lg bg-muted/60 border border-border/60 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEmailTabMode("UNSENT")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                      emailTabMode === "UNSENT"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Inbox className="size-3.5" />
+                    Pending Unsent
+                    {emailList.unsent.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-500 text-white">
+                        {emailList.unsent.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmailTabMode("SENT")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                      emailTabMode === "SENT"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Archive className="size-3.5" />
+                    Sent Archive
+                    <span className="ml-1 text-[11px] text-muted-foreground">({emailList.sent.length})</span>
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {/* ── SUB-VIEW: PENDING UNSENT ── */}
+              {emailTabMode === "UNSENT" && (
+                <div className="space-y-4">
+                  {emailList.unsent.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-14 text-center">
+                      <div className="size-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-3 text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="size-6" />
+                      </div>
+                      <p className="font-bold text-foreground text-sm">All Emails Dispatched</p>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                        There are no pending customer notifications.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/60">
+                        {emailList.unsent.map((item) => {
+                          const isWelcome = item.trigger === "ACCOUNT_CREATED"
+                          return (
+                            <div
+                              key={item.id}
+                              className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/30 px-2 rounded-lg transition-colors"
+                            >
+                              <div className="space-y-1.5 min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    className={`text-[10px] font-bold ${
+                                      isWelcome
+                                        ? "border-blue-300 text-blue-900 bg-blue-100"
+                                        : "border-emerald-300 text-emerald-900 bg-emerald-100"
+                                    }`}
+                                  >
+                                    {isWelcome ? "Account Welcome" : "Transaction Confirmed"}
+                                  </Badge>
+
+                                  {item.referenceId && (
+                                    <span className="font-mono text-[11px] text-muted-foreground">
+                                      Ref: {item.referenceId}
+                                    </span>
+                                  )}
+
+                                  <span className="text-[11px] text-muted-foreground">
+                                    • {new Date(item.createdAt).toLocaleString("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                </div>
+
+                                <div className="text-sm font-semibold truncate text-foreground">
+                                  {item.subject}
+                                </div>
+
+                                <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                  <span className="font-medium text-foreground">{item.toName}</span>
+                                  <span>&lt;{item.toEmail}&gt;</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <a
+                                  href={`mailto:${item.toEmail}?subject=${encodeURIComponent(item.subject)}&body=${encodeURIComponent(item.bodyText)}`}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                  title="Quick open in system mail client"
+                                >
+                                  <ExternalLink className="size-3" />
+                                  <span className="hidden sm:inline">Mail Client</span>
+                                </a>
+
+                                <Button
+                                  size="sm"
+                                  onClick={() => setSelectedEmail(item)}
+                                  className="text-xs h-8 gap-1.5 font-semibold"
+                                >
+                                  <Copy className="size-3.5" />
+                                  View &amp; Copy
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleMarkEmailSent(item)}
+                                  disabled={markingSentId === item.id}
+                                  className="text-xs h-8 gap-1 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                                >
+                                  <CheckCircle2 className="size-3.5" />
+                                  {markingSentId === item.id ? "Marking…" : "Mark Sent"}
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── SUB-VIEW: SENT ARCHIVE ── */}
+              {emailTabMode === "SENT" && (
+                <div className="space-y-4">
+                  {emailList.sent.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-muted-foreground">
+                      No sent emails in archive yet.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Recipient</TableHead>
+                            <TableHead>Subject</TableHead>
+                            <TableHead>Sent At</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {emailList.sent.map((item) => {
+                            const isWelcome = item.trigger === "ACCOUNT_CREATED"
+                            return (
+                              <TableRow key={item.id}>
+                                <TableCell>
+                                  <Badge
+                                    className={`text-[10px] font-bold ${
+                                      isWelcome
+                                        ? "border-blue-300 text-blue-900 bg-blue-100"
+                                        : "border-emerald-300 text-emerald-900 bg-emerald-100"
+                                    }`}
+                                  >
+                                    {isWelcome ? "Welcome" : "Transaction"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-xs font-semibold">{item.toName}</div>
+                                  <div className="text-[11px] text-muted-foreground font-mono">{item.toEmail}</div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-xs max-w-xs truncate font-medium">{item.subject}</div>
+                                  {item.referenceId && (
+                                    <div className="text-[10px] text-muted-foreground font-mono">
+                                      Ref: {item.referenceId}
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                    {item.sentAt
+                                      ? new Date(item.sentAt).toLocaleString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })
+                                      : "Sent"}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setSelectedEmail(item)}
+                                    className="text-xs h-7 gap-1"
+                                  >
+                                    <FileText className="size-3" />
+                                    View Copy
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* ── TAB 2: CUSTOMERS ── */}
       {activeTab === "CUSTOMERS" && (
         <Card className="shadow-sm border-border/80">
@@ -874,8 +1207,8 @@ export function AdminControls({
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold">{acc.accountType}</span>
                               <Badge
-                                variant={acc.status === "ACTIVE" ? "outline" : "destructive"}
-                                className="text-[10px] py-0"
+                                variant={acc.status === "ACTIVE" ? "success" : "destructive"}
+                                className="text-[10px] py-0 font-bold"
                               >
                                 {acc.status}
                               </Badge>
@@ -1176,7 +1509,7 @@ export function AdminControls({
                       <label className="text-xs font-semibold" htmlFor="sortCodeInput">
                         Sort Code (4 digits)
                       </label>
-                      <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-300">
+                      <Badge className="text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
                         Internal Transfers
                       </Badge>
                     </div>
@@ -1200,7 +1533,7 @@ export function AdminControls({
                       <label className="text-xs font-semibold" htmlFor="bicCodeInput">
                         BIC Code (8 characters)
                       </label>
-                      <Badge variant="outline" className="text-[10px] text-cyan-600 border-cyan-300">
+                      <Badge className="text-[10px] font-bold bg-cyan-100 text-cyan-900 border border-cyan-300">
                         External Wires
                       </Badge>
                     </div>
@@ -1224,7 +1557,7 @@ export function AdminControls({
                       <label className="text-xs font-semibold" htmlFor="rvsCodeInput">
                         RVS Code (7 digits)
                       </label>
-                      <Badge variant="outline" className="text-[10px] text-violet-600 border-violet-300">
+                      <Badge className="text-[10px] font-bold bg-violet-100 text-violet-900 border border-violet-300">
                         Internal Transfers
                       </Badge>
                     </div>
@@ -1248,7 +1581,7 @@ export function AdminControls({
                       <label className="text-xs font-semibold" htmlFor="fwCodeInput">
                         FW Code (3 digits)
                       </label>
-                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                      <Badge className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                         All Transfers
                       </Badge>
                     </div>
@@ -1620,6 +1953,261 @@ export function AdminControls({
                 </div>
               </form>
             </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── EMAIL DISPATCH ASSISTANT MODAL ── */}
+      {selectedEmail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <Card className="w-full max-w-2xl shadow-2xl border-border bg-card overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            <CardHeader className="pb-3 border-b border-border/60">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Mail className="size-4 text-primary" />
+                    <CardTitle className="text-base font-bold">Email Dispatch Assistant</CardTitle>
+                    <Badge
+                      className={`text-[10px] font-bold ${
+                        selectedEmail.trigger === "ACCOUNT_CREATED"
+                          ? "border-blue-300 text-blue-900 bg-blue-100"
+                          : "border-emerald-300 text-emerald-900 bg-emerald-100"
+                      }`}
+                    >
+                      {selectedEmail.trigger === "ACCOUNT_CREATED" ? "Account Welcome" : "Transaction Confirmed"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {selectedEmail.sentAt ? (
+                  <Badge className="bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200 font-bold text-[10px] shrink-0 gap-1 shadow-xs">
+                    <CheckCircle2 className="size-3" />
+                    Dispatched
+                  </Badge>
+                ) : (
+                  <Badge className="bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[10px] shrink-0">
+                    Pending Send
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+              {/* One-Click Launch Mail Client */}
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-primary flex items-center gap-1.5 text-xs">
+                    <Zap className="size-3.5" />
+                    Fast Auto-Fill Launcher
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Zero typing required</span>
+                </div>
+                <a
+                  href={`mailto:${selectedEmail.toEmail}?subject=${encodeURIComponent(selectedEmail.subject)}&body=${encodeURIComponent(selectedEmail.bodyText)}`}
+                  className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded-md bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 transition-opacity"
+                >
+                  <ExternalLink className="size-3.5" />
+                  Launch Mail Client with Pre-filled Content
+                </a>
+              </div>
+
+              {/* Recipient Field */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">1. Recipient Email (To:)</label>
+                  <span className="text-[11px] text-muted-foreground">{selectedEmail.toName}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={selectedEmail.toEmail}
+                    className="font-mono text-xs bg-muted/40 h-9"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(selectedEmail.toEmail, "to")}
+                    className="shrink-0 text-xs h-9 px-3 gap-1.5 font-medium"
+                  >
+                    {copyFeedback === "to" ? (
+                      <>
+                        <Check className="size-3.5 text-emerald-600" />
+                        <span className="text-emerald-600 font-semibold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="size-3.5" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Subject Field */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">2. Subject Line</label>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={selectedEmail.subject}
+                    className="text-xs bg-muted/40 font-medium h-9"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(selectedEmail.subject, "subject")}
+                    className="shrink-0 text-xs h-9 px-3 gap-1.5 font-medium"
+                  >
+                    {copyFeedback === "subject" ? (
+                      <>
+                        <Check className="size-3.5 text-emerald-600" />
+                        <span className="text-emerald-600 font-semibold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="size-3.5" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Email Body Field */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">3. Message Body</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex rounded-md border border-border/80 overflow-hidden text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setEmailBodyFormat("text")}
+                        className={`px-2 py-0.5 ${
+                          emailBodyFormat === "text" ? "bg-muted font-bold text-foreground" : "text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        Plain Text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEmailBodyFormat("html")}
+                        className={`px-2 py-0.5 ${
+                          emailBodyFormat === "html" ? "bg-muted font-bold text-foreground" : "text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        HTML
+                      </button>
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        copyToClipboard(
+                          emailBodyFormat === "text" ? selectedEmail.bodyText : selectedEmail.bodyHtml,
+                          "body"
+                        )
+                      }
+                      className="text-xs h-7 px-2.5 gap-1 font-medium"
+                    >
+                      {copyFeedback === "body" ? (
+                        <>
+                          <Check className="size-3 text-emerald-600" />
+                          <span className="text-emerald-600 font-semibold">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="size-3" />
+                          <span>Copy Body</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {emailBodyFormat === "text" ? (
+                  <pre className="p-3.5 rounded-lg bg-muted/40 font-mono text-xs whitespace-pre-wrap max-h-56 overflow-y-auto border border-border/70 select-all leading-relaxed text-foreground">
+                    {selectedEmail.bodyText}
+                  </pre>
+                ) : (
+                  <div className="border border-border/70 rounded-lg overflow-hidden max-h-56 overflow-y-auto bg-white p-2">
+                    <iframe
+                      srcDoc={selectedEmail.bodyHtml}
+                      title="HTML Email Preview"
+                      className="w-full h-52 border-0"
+                      sandbox="allow-same-origin"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Reference information */}
+              {selectedEmail.referenceId && (
+                <div className="text-[11px] text-muted-foreground font-mono">
+                  Internal Tracking Reference: {selectedEmail.referenceId}
+                </div>
+              )}
+            </CardContent>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-border/60 bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const combined = `To: ${selectedEmail.toEmail}\nSubject: ${selectedEmail.subject}\n\n${selectedEmail.bodyText}`
+                  copyToClipboard(combined, "all")
+                }}
+                className="w-full sm:w-auto text-xs gap-1.5"
+              >
+                {copyFeedback === "all" ? (
+                  <>
+                    <Check className="size-3.5 text-emerald-600" />
+                    <span className="text-emerald-600 font-semibold">All Details Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="size-3.5" />
+                    <span>Copy All (To + Subject + Body)</span>
+                  </>
+                )}
+              </Button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedEmail(null)}
+                  className="flex-1 sm:flex-none text-xs"
+                >
+                  Close
+                </Button>
+
+                {!selectedEmail.sentAt ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleMarkEmailSent(selectedEmail)}
+                    disabled={markingSentId === selectedEmail.id}
+                    className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5"
+                  >
+                    <CheckCircle2 className="size-3.5" />
+                    {markingSentId === selectedEmail.id ? "Saving…" : "Mark as Sent"}
+                  </Button>
+                ) : (
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="size-3.5" />
+                    Dispatched on {new Date(selectedEmail.sentAt).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            </div>
           </Card>
         </div>
       )}

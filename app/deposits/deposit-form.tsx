@@ -207,8 +207,8 @@ export function DepositForm({
                     </div>
                   </div>
                   <Badge
-                    variant={acc.status === "ACTIVE" ? "outline" : "destructive"}
-                    className="text-[10px]"
+                    variant={acc.status === "ACTIVE" ? "success" : "destructive"}
+                    className="text-[10px] font-bold"
                   >
                     {acc.status}
                   </Badge>

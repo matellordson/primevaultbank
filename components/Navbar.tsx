@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   Globe,
+  History,
 } from "lucide-react"
 
 interface NavbarProps {
@@ -29,9 +30,10 @@ interface NavbarProps {
 
 const NAV_LABELS: Record<string, Record<string, string>> = {
   "/dashboard": { EN: "Dashboard", ES: "Panel", FR: "Tableau", DE: "Übersicht", AR: "لوحة" },
-  "/kyc": { EN: "Verification", ES: "Verificación", FR: "Vérification", DE: "Verifizierung", AR: "تحقق" },
   "/transfers": { EN: "Transfer", ES: "Transferir", FR: "Transfert", DE: "Überweisung", AR: "تحويل" },
   "/deposits": { EN: "Deposit", ES: "Depósito", FR: "Dépôt", DE: "Einzahlung", AR: "إيداع" },
+  "/transactions": { EN: "History", ES: "Historial", FR: "Historique", DE: "Verlauf", AR: "السجل" },
+  "/kyc": { EN: "Verification", ES: "Verificación", FR: "Vérification", DE: "Verifizierung", AR: "تحقق" },
   "/admin": { EN: "Admin Desk", ES: "Admin", FR: "Admin", DE: "Admin", AR: "إدارة" },
 }
 
@@ -46,9 +48,10 @@ export function Navbar({ user }: NavbarProps) {
       ? [{ href: "/admin", label: "Admin Desk", icon: ShieldAlert }]
       : [
           { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-          { href: "/kyc", label: "Verification", icon: ShieldAlert },
           { href: "/transfers", label: "Transfer", icon: ArrowLeftRight },
           { href: "/deposits", label: "Deposit", icon: Download },
+          { href: "/transactions", label: "History", icon: History },
+          { href: "/kyc", label: "Verification", icon: ShieldAlert },
         ]
 
   const [prevPathname, setPrevPathname] = React.useState(pathname)

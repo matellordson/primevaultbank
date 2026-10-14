@@ -4,7 +4,6 @@ import * as React from "react"
 import Link from "next/link"
 import { loginAction } from "@/lib/actions/auth-actions"
 import { ThemeToggle } from "@/components/ThemeToggle"
-import { FloatingSupportChat } from "@/components/FloatingSupportChat"
 import { ShieldCheck, Lock, Mail, ArrowRight, Eye, EyeOff, Sparkles } from "lucide-react"
 
 export default function LoginPage() {
@@ -126,17 +125,9 @@ export default function LoginPage() {
                 Open an Account
               </Link>
             </div>
-
-            <div className="pt-1">
-              <Link href="/admin/login" className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors font-medium">
-                System Administrator Access &rarr;
-              </Link>
-            </div>
           </div>
         </div>
       </div>
-
-      <FloatingSupportChat />
     </div>
   )
 }

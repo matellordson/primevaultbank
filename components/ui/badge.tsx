@@ -3,21 +3,23 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+          "border-blue-300 bg-blue-100 text-blue-900 shadow-xs hover:bg-blue-200",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "border-slate-300 bg-slate-100 text-slate-800 shadow-xs hover:bg-slate-200",
         destructive:
-          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
-        outline: "text-foreground",
+          "border-red-300 bg-red-100 text-red-900 shadow-xs hover:bg-red-200",
+        outline: "border-slate-300 bg-slate-100 text-slate-800 shadow-xs",
         success:
-          "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20",
+          "border-emerald-300 bg-emerald-100 text-emerald-900 shadow-xs hover:bg-emerald-200",
         warning:
-          "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+          "border-amber-300 bg-amber-100 text-amber-900 shadow-xs hover:bg-amber-200",
+        info:
+          "border-blue-300 bg-blue-100 text-blue-900 shadow-xs hover:bg-blue-200",
       },
     },
     defaultVariants: {

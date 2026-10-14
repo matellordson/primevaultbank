@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { ThemeProvider } from "@/components/theme-provider"
+import { SmartsuppChat } from "@/components/SmartsuppChat"
 import "./globals.css"
 
 const geistSans = { variable: "" }
@@ -55,6 +56,7 @@ export default function RootLayout({
     >
       <body className="h-full bg-slate-50 text-slate-900 antialiased font-sans">
         <ThemeProvider>{children}</ThemeProvider>
+        <SmartsuppChat />
       </body>
     </html>
   )

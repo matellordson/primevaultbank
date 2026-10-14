@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { getSession } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { Prisma } from "@prisma/client"
+import { transactionCompletedEmail } from "@/lib/email-templates"
 
 async function verifyAdmin() {
   const session = await getSession()
@@ -43,6 +44,7 @@ export async function approveTransfer(
       // Locate the destination account by account number
       const destAccount = await db.account.findUnique({
         where: { accountNumber: tx.recipientAccountNumber },
+        include: { user: true },
       })
 
       if (!destAccount) {
@@ -63,7 +65,10 @@ export async function approveTransfer(
         return { error: "Recipient account is frozen. Please reject this transaction." }
       }
 
-      const sourceAccount = await db.account.findUnique({ where: { id: tx.sourceAccountId } })
+      const sourceAccount = await db.account.findUnique({
+        where: { id: tx.sourceAccountId },
+        include: { user: true },
+      })
       if (!sourceAccount) return { error: "Source account not found." }
 
       const txAmount = Number(tx.amount)
@@ -72,7 +77,19 @@ export async function approveTransfer(
         return { error: "Insufficient funds in sender account. Please reject this transaction." }
       }
 
-      // Atomic debit + credit + mark completed
+      const mail = transactionCompletedEmail({
+        userName: sourceAccount.user.name,
+        referenceId: tx.referenceId,
+        amount: txAmount,
+        currency: tx.currency,
+        transactionType: tx.type,
+        description: tx.description,
+        recipientName: tx.recipientName || destAccount.user?.name,
+        newBalance: Number(sourceAccount.balance) - txAmount,
+        processedAt: new Date(),
+      })
+
+      // Atomic debit + credit + mark completed + queue email
       await db.$transaction([
         db.account.update({
           where: { id: sourceAccount.id },
@@ -89,6 +106,17 @@ export async function approveTransfer(
             destinationAccountId: destAccount.id,
             processedAt: new Date(),
             adminNotes: adminNotes || "Approved by Bank Operations Desk",
+          },
+        }),
+        db.emailQueue.create({
+          data: {
+            toEmail: sourceAccount.user.email,
+            toName: sourceAccount.user.name,
+            subject: mail.subject,
+            bodyHtml: mail.bodyHtml,
+            bodyText: mail.bodyText,
+            trigger: "TRANSACTION_COMPLETED",
+            referenceId: tx.referenceId,
           },
         }),
         db.auditLog.create({
@@ -110,13 +138,29 @@ export async function approveTransfer(
     if (tx.type === "EXTERNAL_WIRE") {
       if (!tx.sourceAccountId) return { error: "Source account not recorded." }
 
-      const sourceAccount = await db.account.findUnique({ where: { id: tx.sourceAccountId } })
+      const sourceAccount = await db.account.findUnique({
+        where: { id: tx.sourceAccountId },
+        include: { user: true },
+      })
       if (!sourceAccount) return { error: "Source account not found." }
 
       const txAmount = Number(tx.amount)
       if (Number(sourceAccount.balance) < txAmount) {
         return { error: "Insufficient funds in sender account." }
       }
+
+      const mail = transactionCompletedEmail({
+        userName: sourceAccount.user.name,
+        referenceId: tx.referenceId,
+        amount: txAmount,
+        currency: tx.currency,
+        transactionType: tx.type,
+        description: tx.description,
+        recipientName: tx.recipientName,
+        recipientBank: tx.recipientBank,
+        newBalance: Number(sourceAccount.balance) - txAmount,
+        processedAt: new Date(),
+      })
 
       await db.$transaction([
         db.account.update({
@@ -129,6 +173,17 @@ export async function approveTransfer(
             status: "COMPLETED",
             processedAt: new Date(),
             adminNotes: adminNotes || "Approved — wire initiated",
+          },
+        }),
+        db.emailQueue.create({
+          data: {
+            toEmail: sourceAccount.user.email,
+            toName: sourceAccount.user.name,
+            subject: mail.subject,
+            bodyHtml: mail.bodyHtml,
+            bodyText: mail.bodyText,
+            trigger: "TRANSACTION_COMPLETED",
+            referenceId: tx.referenceId,
           },
         }),
         db.auditLog.create({
@@ -149,10 +204,24 @@ export async function approveTransfer(
     if (tx.type === "DEPOSIT_REQUEST") {
       if (!tx.destinationAccountId) return { error: "Destination account not recorded." }
 
-      const destAccount = await db.account.findUnique({ where: { id: tx.destinationAccountId } })
+      const destAccount = await db.account.findUnique({
+        where: { id: tx.destinationAccountId },
+        include: { user: true },
+      })
       if (!destAccount) return { error: "Destination account not found." }
 
       const txAmount = Number(tx.amount)
+
+      const mail = transactionCompletedEmail({
+        userName: destAccount.user.name,
+        referenceId: tx.referenceId,
+        amount: txAmount,
+        currency: tx.currency,
+        transactionType: tx.type,
+        description: tx.description || (tx.depositReference ? `Deposit Ref: ${tx.depositReference}` : undefined),
+        newBalance: Number(destAccount.balance) + txAmount,
+        processedAt: new Date(),
+      })
 
       await db.$transaction([
         db.account.update({
@@ -165,6 +234,17 @@ export async function approveTransfer(
             status: "COMPLETED",
             processedAt: new Date(),
             adminNotes: adminNotes || "Deposit verified and credited",
+          },
+        }),
+        db.emailQueue.create({
+          data: {
+            toEmail: destAccount.user.email,
+            toName: destAccount.user.name,
+            subject: mail.subject,
+            bodyHtml: mail.bodyHtml,
+            bodyText: mail.bodyText,
+            trigger: "TRANSACTION_COMPLETED",
+            referenceId: tx.referenceId,
           },
         }),
         db.auditLog.create({
@@ -246,7 +326,10 @@ export async function adjustBalance(params: {
 
     if (amount <= 0) return { error: "Amount must be greater than zero." }
 
-    const account = await db.account.findUnique({ where: { id: accountId } })
+    const account = await db.account.findUnique({
+      where: { id: accountId },
+      include: { user: true },
+    })
     if (!account) return { error: "Account not found." }
 
     if (type === "DEBIT" && Number(account.balance) < amount) {
@@ -254,6 +337,18 @@ export async function adjustBalance(params: {
     }
 
     const referenceId = `ADJ-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
+    const newBal = type === "CREDIT" ? Number(account.balance) + amount : Number(account.balance) - amount
+
+    const mail = transactionCompletedEmail({
+      userName: account.user.name,
+      referenceId,
+      amount,
+      currency: account.currency,
+      transactionType: "ADMIN_ADJUSTMENT",
+      description: notes || `Manual ${type.toLowerCase()} by admin`,
+      newBalance: newBal,
+      processedAt: new Date(),
+    })
 
     await db.$transaction([
       db.account.update({
@@ -275,6 +370,17 @@ export async function adjustBalance(params: {
           description: notes || `Manual ${type.toLowerCase()} by admin`,
           adminNotes: notes,
           processedAt: new Date(),
+        },
+      }),
+      db.emailQueue.create({
+        data: {
+          toEmail: account.user.email,
+          toName: account.user.name,
+          subject: mail.subject,
+          bodyHtml: mail.bodyHtml,
+          bodyText: mail.bodyText,
+          trigger: "TRANSACTION_COMPLETED",
+          referenceId,
         },
       }),
       db.auditLog.create({
